@@ -1,0 +1,149 @@
+---
+title: "Subsampling Data Using SPARROW"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Subsampling Data Using SPARROW}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(sparrow)
+library(spotglm)
+```
+
+## Overview
+SPARROW (Submodular Power Adaptive data Reduction for Representative dOWnstream analysis) is a method that selects a subsample of size $K$ from a large scale dataset. The subsample is chosen such that it maximizes the power of a downstream analysis (e.g. regression). This is done by minimizing the trace of $(X^TX)^{-1}$ which corresponds to the sum of the square of the standard errors of a standard linear regression. In the case of large scale spatial-omic data that contains mixtures of cells called spots, the covariate matrix $X_{n \times p}$ must be expanded to be of dimension $n \times (p\times T)$ where $T$ is the number of cell types in the sample. More technical details can be found in the supplementary.
+
+## Step 1: Simulating Data 
+
+We use the simulate data function in sparrow to simulate 100,000 spots with 8 cell types. Each spot contains at most 2 cell types. We simulate data according to the model 
+$$Y_i \sim Pois(\sum_{t=1}^{T}\lambda_{i,t}\exp(X_i\beta^t + \log(1000)))$$
+Here $Y_i$ is the response (e.g. gene expression) for spot $i$, $X_i$ is the covariate vector for spot $i$,$t$ denotes a cell type, $\lambda_{i,t}$ is the deconvolution estimate for cell type $t$ in spot $i$, and $\beta^t$ is the effect vector for cell type $t$. Note that each cell type gets a different effect vector. Also note that the columns of $X$ are bounded between 0 and 1. Bounding all columns between some interval is recommended to prevent scaling issues and to make interpretation easier. 
+```{r}
+data = sparrow::simulate_data(n = 1e5, nct = 8,effect_scale = 1/5,
+                              intercept_scale = 4,
+                              library_size = 1000, spot_ct = 2,
+                              p = 8,num_null = 2,prob_ct = NULL)
+
+```
+
+## Step 2: Expand the Covariate Matrix to Incorporate Deconvolution
+
+The model above has a variance covariance matrix equal to $(Z^TAZ)^{-1}$. The matrix $Z$ is equal to 
+$$Z = [X*\lambda_{t_1},...X*\lambda_{t_T}]$$
+i.e. we append $T$ copies of $X$ together, weighted by the deconvolution vectors for each cell type.\
+The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta^t + \log(1000))$. As $X_i\beta^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error. For now, let this bound be equal to $-5$. In general, what one can do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). 
+
+```{r}
+expanded_X = sparrow::expand_covariate_matrix(X = data$X, lambda = data$lambda,
+                                            family = "poisson",lib_size = 1000,
+                                            min_reads_per_1000 = 1000*exp(-5))
+valid = expanded_X$valid
+expanded_X = expanded_X$X
+
+```
+
+
+## Step 3: Compute Target Standard Error of Subsample
+
+The goal of SPARROW is to identify a subsample of the data such that the subsampled data and the original data have similar power. This is done by comparing the standard errors in the subsample and the standard errors in the original dataset. Key to this procedure is specifying a minimum effect size $\delta_{\min}$. This is the minimum effect size that one cares about identifying. For example, in the case of poisson regression, one may not care about identifying log fold changes less than a certain amount. In this case let us choose $\delta_{\min} = 0.05$. \
+For covariate $j$, let its standard error on the entire dataset be $\sigma_j$. Under some assumptions one can compute the power when the standard error is $\sigma_j$ and the effect size is $\delta$, $P(\sigma_j,\delta)$. Define $P(\sigma_j)$ as the average power the interval $[\delta_{\min},\delta_{\max,j}]$. $\delta_{max}$ is defined as 
+
+$$\delta_{\max,j} = \min_{\delta}: P(\sigma_j,\delta) > 0.999$$
+
+If $\delta_{\max,j} < \delta_{\min}$, $P(\sigma_j) = 0.999$. Given $P(\sigma_j)$, we can compute 
+$$\sigma_{\text{target},j} = \max_{\sigma_j '}:P(\sigma_j ') > c\times P(\sigma_j)$$
+where $c$ is a constant close to 1 (e.g. 0.99).$\sigma_{\text{target},j}$ represents the largest standard error at which we recover at least $c$ of the power that the original data has for covariate $j$. Below we compute the target standard errors when $c = 0.99$. 
+
+```{r}
+target_standard_errors = sparrow::compute_target_standard_error(X = expanded_X,
+                                min_effect = 0.05,target_power_approx = 0.99)
+
+```
+
+
+## Step 4: Subsampling via SPARROW (~1 minute)
+
+SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when each individual entry of the diagonal of $(Z_K^TAZ_K)^{-1}$ is less than $\sigma_{\text{target},j}$ for all $j$. Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\\
+
+
+```{r}
+selected_indices = sparrow::data_selection(X = t(expanded_X),
+                        data_size = 80000,min_SE = target_standard_errors,
+                        log = TRUE,period = 5000)
+selected_indices = selected_indices[is.na(selected_indices) == F]
+print(paste0("#Cells Subsampled: ", length(selected_indices)))
+```
+Note here that we select approximately 30,000 out of 100,000 total spots. 
+
+## Step 4: Example Downstream Analysis (~5 minuts)
+
+To test the performance of our subsampled dataset, we will run spotGLM on both the original dataset and the subsampled data. We see that the power on both datasets are near identical.
+
+```{r}
+library(spotglm)
+nsim = 25
+full_power = rep(NA,nsim)
+subset_power = rep(NA,nsim)
+full_time = rep(NA,nsim)
+subset_time = rep(NA,nsim)
+t1 = Sys.time()
+for(j in c(1:nsim)){
+  #simulate new response vector
+  expected_value = spotglm::spot_poisson$predict(X = data$X,beta = data$beta, 
+                                                 lambda = data$lambda,
+                                                 offset = rep(log(1000),
+                                                              length(data$y)))
+  expected_value = expected_value$total
+  data$y = rpois(1e5,lambda = expected_value)
+  #run spotglm on original dataset
+  model_full = spotglm::run_model(y = data$y, X = data$X, lambda = data$lambda, 
+                        offset = rep(log(1000),length(data$y)),
+                        family = "spot poisson",initialization = "intercept",
+                        intercept_col = 1,batch_size = 500,n_epochs = 100,
+                        improvement_threshold = 1e-6,max_conv = 20)
+
+  #run spotglm on subsetted data
+  model_subset = spotglm::run_model(y = data$y[selected_indices],
+                        X = data$X[selected_indices,], 
+                        lambda = data$lambda[selected_indices,], 
+                        offset=rep(log(1000),length(data$y))[selected_indices],
+                        family = "spot poisson",initialization = "intercept",
+                        intercept_col = 1,batch_size = 500,n_epochs = 100,
+                        improvement_threshold = 1e-6,max_conv = 20)
+  
+  #compute power 
+  full_sig = abs(model_full$beta_est/model_full$stand_err_mat)>1.96
+  subset_sig = abs(model_subset$beta_est/model_subset$stand_err_mat)>1.96
+  full_power[j] = sum(full_sig * (1-data$null_beta))/sum(1-data$null_beta)
+  subset_power[j] = sum(subset_sig * (1-data$null_beta))/sum(1-data$null_beta)
+  #sompute time
+  full_time[j] = model_full$time
+  subset_time[j] = model_subset$time
+}
+print(Sys.time() - t1)
+
+```
+
+
+```{r}
+print(paste0("Mean Power on Full Data: ", round(mean(full_power),3)))
+print(paste0("Mean Power on Subsetted Data: ", round(mean(subset_power),3)))
+```
+
+
+
+
+
+
+
+
+

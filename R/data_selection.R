@@ -1,9 +1,19 @@
-
-#X is the data matrix(p by n where p is the number of covariates and n is the number of data points)
-#data size is how many points we wish to select
-
-#expand covariate matrix based on X, lambda, family,and min expresson
-expand_covariate_matrix = function(X,lambda,family,keep_coef = matrix(1,ncol(X),ncol(lambda)),
+#' Expand Covariate Matrix Based on Cell Type Proportions
+#'
+#' Expands the design matrix \code{X} using cell type proportions \code{lambda},
+#' applying scaling for sequencing depth and removing low-frequency features.
+#'
+#' @param X Covariate matrix of dimension (n times p)
+#' @param lambda Matrix of cell type proportions (n x k)
+#' @param family Model family: "poisson", "negative binomial", or "binomial"
+#' @param keep_coef Matrix indicating which coefficients to keep (default: all 1s)
+#' @param lib_size Library sizes for each sample (default: 1 for all)
+#' @param min_reads_per_1000 Minimum reads per 1000 for scaling (default: 1)
+#' @param min_freq Minimum frequency for a feature to be retained (default: 500)
+#'
+#' @return A scaled and expanded covariate matrix
+#' @export
+expand_covariate_matrix = function(X,lambda,family = "gaussian",keep_coef = matrix(1,ncol(X),ncol(lambda)),
                                    lib_size = rep(1,nrow(X)), min_reads_per_1000 = 1,min_freq = 500){
   #get scaled library sizes
   if(family == "poisson" | family == "negative binomial"){
@@ -12,6 +22,11 @@ expand_covariate_matrix = function(X,lambda,family,keep_coef = matrix(1,ncol(X),
   } else if(family == "binomial"){
     scaled_spot_size = sqrt((lib_size/1000)*min_reads_per_1000)
     X = sweep(X,1,scaled_spot_size,"*")
+  }else if(family == "gaussian"){
+    X = X
+  }else{
+    stop("family should be one of poisson, negative binomial, or gaussian\n
+        If you don't wish to apply any transformation to X, use gaussian(default)")
   }
 
   #initialize expanded covariate matrix
@@ -22,7 +37,9 @@ expand_covariate_matrix = function(X,lambda,family,keep_coef = matrix(1,ncol(X),
     bad_ind = which(keep_coef[,j] == 0)
     #get scaled X
     scaled_X = sweep(X,1,lambda[,j],"*")
-    colnames(scaled_X) = paste0(colnames(lambda)[j],":",colnames(X))
+    if(is.null(colnames(lambda)) == F & is.null(colnames(X)) == F){
+      colnames(scaled_X) = paste0(colnames(lambda)[j],":",colnames(X))
+    }
     #remove index
     if(length(bad_ind)>0){
       scaled_X = scaled_X[,-bad_ind]
@@ -33,12 +50,29 @@ expand_covariate_matrix = function(X,lambda,family,keep_coef = matrix(1,ncol(X),
   big_X = do.call(cbind, big_X)
   #remove those columns that don't appear enough
   freq = apply(big_X,2,function(x){sum(x != 0)})
-  big_X = big_X[,(freq > min_freq)]
+  big_X = big_X[,(freq >= min_freq)]
 
-  return(big_X)
+  #return valid covariates
+  valid = matrix(1,ncol(X),ncol(lambda))
+  valid[(freq < min_freq)] = 0
+
+  return(list(X = big_X,valid = valid))
 }
 
-#compute target standard erros
+
+
+#' Compute Target Standard Errors for Covariates
+#'
+#' Estimates the minimum required standard errors for detecting given effect sizes with desired power.
+#'
+#' @param X Design matrix
+#' @param min_effect Minimum effect size(s) to detect
+#' @param target_power_approx Approximate desired statistical power (0-1)
+#' @param alpha Type I error rate (e.g., 0.05)
+#' @param acc Accuracy for numeric search (default: 1e-3)
+#'
+#' @return A vector of minimum standard errors for each covariate
+#' @export
 compute_target_standard_error = function(X,min_effect,target_power_approx,alpha,acc = 1e-3){
   if(length(min_effect) == 1){
     min_effect = rep(min_effect,ncol(X))
@@ -75,67 +109,25 @@ compute_target_standard_error = function(X,min_effect,target_power_approx,alpha,
   return(ct_min_SE)
 }
 
-#function to get subset of data of size data size
-#X is of dimension #cov times #observations
-data_selection = function(X,data_size,log = FALSE,min_SE = NULL){
-  #get number of points and number of covariates
-  n = ncol(X)
-  p = nrow(X)
-  #get minimum batch size such that we sacrifice less than 1/1000 of efficiency
-  subsample_size = ceiling(log(1000)*n/data_size)
-  #get initial varcov matrix
-  initial_sigma = diag(x = 100, p)
-  #initialize list of points we choose
-  points_added = rep(NA,data_size)
-  #keep track of how mnay points we have left to pick from
-  points_left = c(1:n)
-  t1 = Sys.time()
-  for(j in c(1:data_size)){
-    if(log & j%%1000 == 0){
-      print(paste0("On iteration ",j," out of ",data_size))
-      print(Sys.time() - t1)
-    }
-    #subsample points
-    m = length(points_left)
-    #sample points
-    samp = sample.int(m, min(subsample_size, m), replace = FALSE)
-    #get sampled indices
-    sampled_inds = points_left[samp]
-    #get the corresponding x points
-    big_X_temp = X[,sampled_inds]
-    #take transpose
-    big_X_temp = t(big_X_temp)
 
 
-    #check gain for each data point
-    A = big_X_temp%*%initial_sigma
-    #numerator and denominator of gain
-    num = rowSums(A^2)
-    denom = 1 + rowSums(A*big_X_temp)
-    #identify best index
-    ind = which.max(num/denom)
-    if(length(ind) > 1){
-      ind = sample(ind,1)
-    }
-    #get best index
-    best_cand = sampled_inds[ind]
 
-    #add point to points added
-    points_added[j] = best_cand
-    #compute new covaraince matrix via woodbury's lemma
-    x = t(big_X_temp[ind,,drop = FALSE])
-    A = initial_sigma%*%x
-    initial_sigma = initial_sigma - A%*%t(A)/(1 + t(x)%*%A)[1,1]
-    #remove point from points left '
-    points_left = points_left[points_left != best_cand]
-  }
-  return(points_added)
-}
 
-#function to get subset of data of size data size
-#with stopping criterion if all SE is less than min_SE
-#X is of dimension #cov times #observations
-data_selection_terminal = function(X,data_size,log = FALSE,min_SE = NULL){
+
+
+#' Select Data with Early Stopping Based on Standard Errors
+#'
+#' Performs greedy data selection with an early stopping criterion when standard errors converge.
+#'
+#' @param X Covariate matrix (p x n)
+#' @param data_size Number of data points to select
+#' @param min_SE Target standard errors for convergence
+#' @param log Whether to print progress
+#' @param period If log = TRUE, print progress every period
+#'
+#' @return A vector of selected data point indices
+#' @export
+data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
   #scale by min_SE
   X = sweep(X,1,min_SE,"*")
   #get number of points and number of covariates
@@ -162,7 +154,7 @@ data_selection_terminal = function(X,data_size,log = FALSE,min_SE = NULL){
       print("ended early")
       break
     }
-    if(log & j%%1000 == 0){
+    if(log & j%%period == 0){
       print(paste0("On iteration ",j," out of ",data_size))
       if(is.null(min_SE) == FALSE){
         print("Ratio of Current SE to Target SE")
@@ -225,18 +217,99 @@ data_selection_terminal = function(X,data_size,log = FALSE,min_SE = NULL){
     #update converged convs
     conv_cov <- conv_cov_curr
     #update weights if needed
-    if(length(removed_covs) > 0 | length(new_covs) > 0){
-      points_left = c(valid_points_left,invalid_points_left)
-      valid_points_left = points_left[freqs[points_left] != 0]
-      invalid_points_left = points_left[freqs[points_left] == 0]
+    if(is.null(min_SE) == FALSE){
+      if(length(removed_covs) > 0 | length(new_covs) > 0){
+        points_left = c(valid_points_left,invalid_points_left)
+        valid_points_left = points_left[freqs[points_left] != 0]
+        invalid_points_left = points_left[freqs[points_left] == 0]
+      }
     }
+  }
+  return(points_added)
+}
+
+#' Select Informative Data Points for Modeling
+#'
+#' Selects a subset of data points to minimize standard error using greedy optimization.
+#'
+#' @param X Covariate matrix (p x n)
+#' @param data_size Number of data points to select
+#' @param log Whether to print progress every 1000 iterations
+#' @param min_SE Optional vector of minimum standard errors for convergence
+#'
+#' @return A vector of selected data point indices
+#' @export
+data_selection_fixed = function(X,data_size,log = FALSE,period = 1000){
+  #get number of points and number of covariates
+  n = ncol(X)
+  p = nrow(X)
+  #get minimum batch size such that we sacrifice less than 1/1000 of efficiency
+  subsample_size = ceiling(log(1000)*n/data_size)
+  #get initial varcov matrix
+  initial_sigma = diag(x = 100, p)
+  #initialize list of points we choose
+  points_added = rep(NA,data_size)
+  #keep track of how mnay points we have left to pick from
+  points_left = c(1:n)
+  t1 = Sys.time()
+  for(j in c(1:data_size)){
+    if(log & j%%period == 0){
+      print(paste0("On iteration ",j," out of ",data_size))
+      print(Sys.time() - t1)
+    }
+
+    #subsample points
+    m = length(points_left)
+    #sample points
+    samp = sample.int(m, min(subsample_size, m), replace = FALSE)
+    #get sampled indices
+    sampled_inds = points_left[samp]
+    #get the corresponding x points
+    big_X_temp = X[,sampled_inds]
+    #take transpose
+    big_X_temp = t(big_X_temp)
+
+
+    #check gain for each data point
+    A = big_X_temp%*%initial_sigma
+    #numerator and denominator of gain
+    num = rowSums(A^2)
+    denom = 1 + rowSums(A*big_X_temp)
+    #identify best index
+    ind = which.max(num/denom)
+    if(length(ind) > 1){
+      ind = sample(ind,1)
+    }
+    #get best index
+    best_cand = sampled_inds[ind]
+
+    #add point to points added
+    points_added[j] = best_cand
+    #compute new covaraince matrix via woodbury's lemma
+    x = t(big_X_temp[ind,,drop = FALSE])
+    A = initial_sigma%*%x
+    initial_sigma = initial_sigma - A%*%t(A)/(1 + t(x)%*%A)[1,1]
+    #remove point from points left '
+    points_left = points_left[points_left != best_cand]
   }
   return(points_added)
 }
 
 
 
-#for a given effect size, desired power, and type 1 error rate, compute min SE
+
+
+#' Compute Minimum Standard Error for Given Power and Effect
+#'
+#' Calculates the minimum standard error needed to detect a given effect with a specified power.
+#'
+#' @param min_effect Minimum effect size
+#' @param pow Desired power (e.g., 0.8 or 0.999)
+#' @param alpha Type I error rate
+#' @param acc Accuracy of the search
+#'
+#' @importFrom stats pnorm qnorm
+#' @keywords internal
 SE_optimizer = function(min_effect,pow,alpha,acc = 1e-3){
   #assume effect
   lower = 0
@@ -255,7 +328,17 @@ SE_optimizer = function(min_effect,pow,alpha,acc = 1e-3){
 }
 
 
-#for a given effect size and type 1 error rate, compute min effect that can be found at desired power
+#' Compute Minimum Detectable Effect Size
+#'
+#' Calculates the minimum detectable effect size given standard error and desired power.
+#'
+#' @param SE Standard error
+#' @param pow Desired power
+#' @param alpha Type I error rate
+#' @param acc Accuracy of search
+#'
+#' @importFrom stats pnorm qnorm
+#' @keywords internal
 min_effect_optimizer = function(SE,pow,alpha,acc = 1e-3){
   #assume effect
   lower = 0
@@ -274,7 +357,16 @@ min_effect_optimizer = function(SE,pow,alpha,acc = 1e-3){
 }
 
 
-#for a given SE and effect size, compute power
+#' Compute Statistical Power
+#'
+#' Calculates the power to detect an effect given a standard error and significance level.
+#'
+#' @param SE Standard error
+#' @param effect Effect size
+#' @param alpha Type I error rate
+#'
+#' @importFrom stats pnorm qnorm
+#' @keywords internal
 power_calc = function(SE,effect,alpha){
   z = qnorm(1-alpha/2)
   1 - pnorm(z - effect/SE) - pnorm(-z - effect/SE)
@@ -282,7 +374,16 @@ power_calc = function(SE,effect,alpha){
   return(1 - pnorm(z - effect/SE) - pnorm(-z - effect/SE))
 }
 
-#for a given SE and effect size, compute power  integrsl
+#' Average Power Over a Range of Effect Sizes
+#'
+#' Computes the average power over a uniform distribution of effect sizes.
+#'
+#' @param SE Standard error
+#' @param effect_min Minimum effect size
+#' @param effect_max Maximum effect size
+#' @param alpha Type I error rate
+#'
+#' @keywords internal
 power_integral = function(SE,effect_min,effect_max,alpha){
   #get what we're integrating over
   nbox = 1000
@@ -294,7 +395,18 @@ power_integral = function(SE,effect_min,effect_max,alpha){
 }
 
 
-#For a given target SE, find min SE that recovers target_power_approx of power
+#' Optimize Standard Error for Target Power Approximation
+#'
+#' Finds the smallest standard error that achieves a desired approximation to target power.
+#'
+#' @param target_SE Initial estimate of standard error
+#' @param target_power_approx Desired power ratio (e.g., 0.95)
+#' @param effect_min Minimum effect size
+#' @param effect_max Maximum effect size
+#' @param alpha Type I error rate
+#' @param acc Accuracy for numeric optimization
+#'
+#' @keywords internal
 SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_max,alpha,acc = 1e-3){
   upper = 100
   lower = 1
@@ -319,8 +431,29 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 }
 
 
-#function to simulate data
-simulate_data = function(n,nct,effect_scale,intercept_scale,library_size ,spot_ct,spot_size,p,num_null = 3,prob_ct = NULL){
+#' Simulate gene expression data
+#'
+#' This function simulates gene expression data using a spot-based model.
+#'
+#' @param n Number of data points
+#' @param nct Number of cell types
+#' @param effect_scale Scale for effect sizes
+#' @param intercept_scale Scale for intercepts
+#' @param library_size Number of trancripts per cell/spot
+#' @param spot_ct Number of cell types per spot
+#' @param p Number of covariates
+#' @param num_null Number of null coefficients to include
+#' @param prob_ct Optional probabilities for cell type sampling
+#' @param family The data generating distribution. One of poisson, negative binomial,binomial, and gaussian
+#' @param dispersion Dispersion parameter for NB or Gaussian family
+#'
+#' @return A list with simulated y, X, lambda, beta, null_beta, and CT
+#' @importFrom gtools rdirichlet
+#' @importFrom stats pnorm qnorm rbinom rnorm rpois runif
+#' @export
+simulate_data = function(n,nct,effect_scale,intercept_scale,library_size,
+                         spot_ct,p,num_null = 3,prob_ct = NULL,family = "poisson",
+                         dispersion = NULL){
   if(is.null(prob_ct)){
     prob_ct = rep(1,nct)
   }
@@ -357,18 +490,41 @@ simulate_data = function(n,nct,effect_scale,intercept_scale,library_size ,spot_c
       counter = counter + 1
     }
     #scale number of cells by spot size
-    lambda[k,] = rdirichlet(1, 2.5*lambda[k,]/sum(lambda[k,]))
+    lambda[k,] = gtools::rdirichlet(1, 2.5*lambda[k,]/sum(lambda[k,]))
     CT[k] = which.max(lambda[k,])
   }
 
   #Calculate eta for all other cell types
   eta_rest = X%*%beta
   #Calculate mu for all other cell types
-  mu_rest = spot_poisson[['marginal_mu']](eta_rest)
-  #Calculate C for all spots
-  C = rowSums(lambda*mu_rest)
-  #simulate response
-  y = rpois(n = length(C),lambda = C*library_size)
+  if(family == "poisson"){
+    mu_rest = exp(eta_rest)
+    #Calculate C for all spots
+    C = rowSums(lambda*mu_rest)
+    #simulate response
+    y = rpois(n = length(C),lambda = C*library_size)
+  }else if(family == "negative binomial"){
+    mu_rest = exp(eta_rest)
+    #Calculate C for all spots
+    C = rowSums(lambda*mu_rest)
+    #simulate response
+    y = stats::rnbinom(n = length(C),mu = C*library_size, size = dispersion)
+  }else if(family == "binomial"){
+    mu_rest = gtools::inv.logit(eta_rest)
+    #Calculate C for all spots
+    C = rowSums(lambda*mu_rest)
+    #simulate response
+    y = rbinom(n = length(C),size = library_size, prob = C)
+  }else if(family == "gaussian"){
+    mu_rest = eta_rest
+    #Calculate C for all spots
+    C = rowSums(lambda*mu_rest)
+    #simulate response
+    y = rnorm(n = length(C),mean = C*library_size,sd = dispersion)
+  }else{
+    stop("Family must be one of poisson, binomila, negative binomial, or gaussian")
+  }
+
 
   #return data
   return(list(y = y, X = X,lambda = lambda ,beta = beta,null_beta = null_beta, CT = CT))
@@ -376,11 +532,461 @@ simulate_data = function(n,nct,effect_scale,intercept_scale,library_size ,spot_c
 
 
 
+#' Read MERFISH Example Data from GitHub
+#'
+#' Downloads and loads MERFISH example data from a public GitHub repository.
+#' The function retrieves cell type annotations, spatial region labels, and
+#' gene expression count matrices (in up to 10 chunks), then returns them as a list.
+#'
+#' @param num_chunks Integer between 0 and 10. Controls how many count matrix chunks
+#' to download and load. Defaults to 10 (all chunks). Use 0 to skip loading counts.
+#'
+#' @return A named list with three elements:
+#' \describe{
+#'   \item{counts}{A matrix or data frame of gene expression counts (combined from multiple chunks).}
+#'   \item{regions}{A vector or factor of region labels for each cell.}
+#'   \item{CT}{A vector or factor of cell types for each cell.}
+#' }
+#'
+#' @details This function requires an internet connection to download data from
+#' \url{https://github.com/kaishumason/SpotGLM-Example-Data}. The function assumes the
+#' repository structure and filenames are consistent with the expected format.
+#'
+#' @examples
+#' \dontrun{
+#' data_list <- read_merfish_data(num_chunks = 5)
+#' head(data_list$counts)
+#' table(data_list$CT)
+#' }
+#'
+#' @export
+read_merfish = function(num_chunks = 10){
+  #get cell types
+  # Define raw GitHub URL
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/merfish/cell_types.rds"
+
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  cell_types <- readRDS(temp_file)
+
+
+  #get regions
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/merfish/regions.rds"
+
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  regions <- readRDS(temp_file)
+
+  #get counts
+  n = min(as.integer(num_chunks),10)
+  if(n<0){
+    stop("number of chunks should be an integer between 0(no counts) and 10 (all counts)")
+  }
+  data = vector("list",n)
+  for(j in c(1:n)){
+    url <- paste0("https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/merfish/counts_",j,".rds")
+    # Temporary file to store the .rds
+    temp_file <- tempfile(fileext = ".rds")
+
+    # Download the file (use mode = "wb" for binary)
+    download.file(url, destfile = temp_file, mode = "wb")
+
+    data[[j]] = readRDS(temp_file)
+  }
+  data = do.call(rbind, data)
+
+  return(list(counts = data,regions = regions, CT = cell_types))
+}
+
+
+
+#' Read Visium HD Example Data from GitHub
+#'
+#' Downloads and loads spatial transcriptomics data from the Visium HD example
+#' dataset hosted on a public GitHub repository. This includes spatial coordinates,
+#' gene expression counts, deconvolution results, and effective niche estimates.
+#'
+#' @return A named list with four elements:
+#' \describe{
+#'   \item{coords}{A matrix or data frame of spatial coordinates (x and y) for each spot.}
+#'   \item{niche}{A matrix, data frame, or list representing effective niche composition per spot.}
+#'   \item{deconv}{A matrix or data frame of cell type deconvolution proportions per spot.}
+#'   \item{counts}{A gene expression count matrix (genes × spots).}
+#' }
+#'
+#' @details This function requires an internet connection to download data from
+#' \url{https://github.com/kaishumason/SpotGLM-Example-Data}. The repository must contain
+#' the files \code{coords.rds}, \code{deconv_matrix.rds}, \code{count_matrix_subset.rds},
+#' and \code{niche.rds} in the \code{visiumHD} folder.
+#'
+#' @examples
+#' \dontrun{
+#' data_list <- read_visiumHD()
+#' head(data_list$coords)
+#' dim(data_list$counts)
+#' }
+#'
+#' @export
+read_visiumHD = function(){
+  #read coordinates
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/visiumHD/coords.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  coords <- as.matrix(readRDS(temp_file)[,4:5])
+
+  #read deconvolution
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/visiumHD/deconv.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  deconv <- as.matrix(readRDS(temp_file))
+
+
+  #read counts
+  #read deconvolution
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/visiumHD/counts.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  counts <- readRDS(temp_file)
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/visiumHD/niche.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  niche <- readRDS(temp_file)
+
+  #read library size
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/visiumHD/library_size.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  library_size <- readRDS(temp_file)
+
+
+  return(list(coords = coords,niche = niche, deconv = deconv, counts = counts,library_size = library_size))
+
+}
 
 
 
 
 
 
+#' Read Visium Example Data from GitHub
+#'
+#' Downloads and loads Visium spatial transcriptomics data from a GitHub repository.
+#' Includes coordinates, deconvolution, effective niche covariates, library sizes, and gene counts.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{coords}{Matrix of spatial coordinates.}
+#'   \item{niche}{Effective niche covariate matrix.}
+#'   \item{deconv}{Cell type deconvolution matrix.}
+#'   \item{counts}{Gene expression count matrix.}
+#'   \item{library_size}{Vector of library sizes per spot.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' visium_data <- read_visium()
+#' str(visium_data)
+#' }
+#'
+#' @export
+read_visium = function(){
+  #read coordinates
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Visium/coords.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
 
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  coords <- as.matrix(readRDS(temp_file))
+
+
+  #read deconvolution
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Visium/deconv.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  deconv <- as.matrix(readRDS(temp_file))
+
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Visium/effective_niche_covariates.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  niche <- readRDS(temp_file)
+
+
+
+  #read library size
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Visium/library_size.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  library_size <- readRDS(temp_file)
+
+
+  #get counts
+  data = vector("list",4)
+  for(j in c(1:4)){
+    url <- paste0("https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Visium/counts_",j,".rds")
+    # Temporary file to store the .rds
+    temp_file <- tempfile(fileext = ".rds")
+
+    # Download the file (use mode = "wb" for binary)
+    download.file(url, destfile = temp_file, mode = "wb")
+
+    data[[j]] = readRDS(temp_file)
+  }
+  data = do.call(cbind, data)
+
+
+
+  return(list(coords = coords,niche = niche, deconv = deconv, counts = data,library_size = library_size))
+
+}
+
+
+
+#' Read Spatial ATAC-Seq Example Data
+#'
+#' Loads spatial ATAC-seq data from a GitHub repository, including coordinates, deconvolution,
+#' region-level features, and motif score matrices.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{coords}{Spatial coordinates matrix.}
+#'   \item{regions}{Matrix or data frame of spatial regions per spot.}
+#'   \item{deconv}{Cell type deconvolution matrix.}
+#'   \item{motif_scores}{Matrix of motif activity scores per region.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' atac_data <- read_spatial_atac()
+#' names(atac_data)
+#' }
+#'
+#' @export
+read_spatial_atac = function(){
+  #read coordinates
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-ATAC/coord.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  coords <- as.matrix(readRDS(temp_file))
+
+
+  #read deconvolution
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-ATAC/deconvolution.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  deconv <- as.matrix(readRDS(temp_file)$mat)
+
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-ATAC/region_matrix.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  regions <- readRDS(temp_file)
+
+
+
+
+  #get counts
+  data = vector("list",3)
+  for(j in c(1:3)){
+    url <- paste0("https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-ATAC/scores_",j,".rds")
+    # Temporary file to store the .rds
+    temp_file <- tempfile(fileext = ".rds")
+
+    # Download the file (use mode = "wb" for binary)
+    download.file(url, destfile = temp_file, mode = "wb")
+
+    data[[j]] = readRDS(temp_file)
+  }
+  data = do.call(cbind, data)
+
+
+
+  return(list(coords = coords,regions = regions, deconv = deconv, motif_scores = data))
+
+}
+
+
+
+#' Read Spatial Long-Read RNA-Seq Data
+#'
+#' Loads spatial long-read RNA-seq data from a GitHub repository. Includes coordinates,
+#' region annotations, deconvolution, library sizes, and expression matrices for genes and isoforms.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{coords}{Matrix of spatial coordinates.}
+#'   \item{regions}{Spatial region annotations.}
+#'   \item{deconv}{Cell type deconvolution matrix.}
+#'   \item{library_size}{Vector of library sizes per spot.}
+#'   \item{total_gene_expression}{Matrix of total gene expression.}
+#'   \item{isoform_expression}{Matrix of isoform-level expression.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' long_read_data <- read_spatial_long_read()
+#' str(long_read_data)
+#' }
+#'
+#' @export
+read_spatial_long_read = function(){
+  #read coordinates
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/coords.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  coords <- as.matrix(readRDS(temp_file))
+
+
+  #read deconvolution
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/deconvolution.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  deconv <- as.matrix(readRDS(temp_file))
+
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/region_matrix.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  regions <- readRDS(temp_file)
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/library_size.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  library_size <- readRDS(temp_file)
+
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/total_gene_expression.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  total_gene_expression <- readRDS(temp_file)
+
+
+
+
+  #read effective niche
+  url <- "https://raw.githubusercontent.com/kaishumason/SpotGLM-Example-Data/main/Spatial-Long-Read/isoform_expression.rds"
+  # Temporary file to store the .rds
+  temp_file <- tempfile(fileext = ".rds")
+
+  # Download the file (use mode = "wb" for binary)
+  download.file(url, destfile = temp_file, mode = "wb")
+
+  # Read the RDS file
+  isoform_expression <- readRDS(temp_file)
+
+
+
+
+
+
+  return(list(coords = coords,regions = regions, deconv = deconv,library_size = library_size,
+              total_gene_expression = total_gene_expression ,isoform_expression = isoform_expression))
+
+}
 

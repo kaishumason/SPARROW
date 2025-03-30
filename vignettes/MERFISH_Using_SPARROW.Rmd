@@ -1,0 +1,367 @@
+---
+title: "MERFISH_Using_SPARROW"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Subsampling MERFISH Data Using SPARROW}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(sparrow)
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+data = read_merfish()
+```
+# Overview
+
+We use a MERFISH colorectal cancer dataset containing 15 cell types and 5 annotated regions. For each gene $g$ we fit the model 
+
+$$Y_{i,g} \sim Pois(\mu_{i,g})$$
+$$\log(\mu_{i,g}) = \log(L_i) + \beta^{g,CT(i)}_{r_i}$$
+$CT(i)$ is the cell type of cell $i$, $L_i$ is the library size of cell $i$, and $r_i$ is the region that cell $i$ belongs. $\beta^{g,CT(i)}_{r_i}$ is the expected expression of gene $g$ in cell type $CT(i)$ in region $r_i$\
+Then for all cell types $t = 1,...15$ and regions $r,r'$ we test
+$$H_0: \beta^{g,t}_{r} = \beta^{g,t}_{r'}$$
+
+The original dataset contains approximately 800,000 cells. We will first downsample to 300,000 cells for the sake of speed. We will then use SPARROW to select a powerful subsample of cells that can recover the majority of significant effects. 
+
+
+
+## Step 1: One hot encoding region and cell type classification
+```{r}
+data$regions = model.matrix(~ regions - 1, 
+                            data = data.frame(regions = data$regions))
+data$CT = model.matrix(~ CT - 1, data = data.frame(CT = data$CT))
+
+#Sample out data to make downstream analysis faster
+ind = c(1:ncol(data$counts))[1:300000]
+data$counts = data$counts[,ind]
+data$regions = data$regions[ind,]
+data$CT = data$CT[ind,]
+```
+
+
+
+
+
+## Step 2: Expand the Covariate Matrix to Incorporate Deconvolution
+
+The model above has a variance covariance matrix equal to $(Z^TAZ)^{-1}$. The matrix $Z$ is equal to 
+$$Z = [X*\lambda_{t_1},...X*\lambda_{t_T}]$$
+i.e. we append $T$ copies of $X$ together, weighted by the deconvolution vectors for each cell type.\
+The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta_{r_i}^t + \log(1000))$. As $X_i\beta_{r_i}^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error. For now, let this bound be equal to $-5$. In general, what one can do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). 
+```{r}
+#get gene totals and total counts
+gene_totals = rowSums(data$counts)
+total_UMI = sum(data$counts)
+
+#get good cutoff value for 
+cutoff = quantile(log(gene_totals/total_UMI),0.75)
+#make expanded covariate matrix 
+expanded_X = sparrow::expand_covariate_matrix(X = data$regions, lambda = data$CT,
+                            family = "poisson",lib_size = colSums(data$counts),
+                                        min_reads_per_1000 = 1000*exp(cutoff),
+                                        min_freq = 250)
+valid_cov = expanded_X$valid
+expanded_X = expanded_X$X
+```
+
+
+## Step 3: Compute Target Standard Error of Subsample
+The goal of SPARROW is to identify a subsample of the data such that the subsampled data and the original data have similar power. This is done by comparing the standard errors in the subsample and the standard errors in the original dataset. Key to this procedure is specifying a minimum effect size $\delta_{\min}$. This is the minimum effect size that one cares about identifying. For example, in the case of poisson regression, one may not care about identifying log fold changes less than a certain amount. In this case let us choose $\delta_{\min} = 0.05$. \
+For covariate $j$, let its standard error on the entire dataset be $\sigma_j$. Under some assumptions one can compute the power when the standard error is $\sigma_j$ and the effect size is $\delta$, $P(\sigma_j,\delta)$. Define $P(\sigma_j)$ as the average power the interval $[\delta_{\min},\delta_{\max,j}]$. $\delta_{max}$ is defined as 
+
+$$\delta_{\max,j} = \min_{\delta}: P(\sigma_j,\delta) > 0.999$$
+
+If $\delta_{\max,j} < \delta_{\min}$, $P(\sigma_j) = 0.999$. Given $P(\sigma_j)$, we can compute 
+$$\sigma_{\text{target},j} = \max_{\sigma_j '}:P(\sigma_j ') > c\times P(\sigma_j)$$
+where $c$ is a constant close to 1 (e.g. 0.99).$\sigma_{\text{target},j}$ represents the largest standard error at which we recover at least $c$ of the power that the original data has for covariate $j$. Below we compute the target standard errors when $c = 0.975$. 
+
+```{r}
+target_standard_errors = sparrow::compute_target_standard_error(X = expanded_X,
+                        min_effect = 0.05/sqrt(2),target_power_approx = 0.975)
+```
+
+
+
+
+## Step 4: Subsampling via SPARROW (~2 minutes)
+SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when each individual entry of the diagonal of $(Z_K^TAZ_K)^{-1}$ is less than $\sigma_{\text{target},j}$ for all $j$. Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\\
+We see that we select around 90,00 cells, 1/3 of the original sample.
+
+```{r}
+selected_indices = sparrow::data_selection(X = t(expanded_X),
+                        data_size = 300000,min_SE = target_standard_errors,
+                        log = TRUE,period = 10000)
+
+selected_indices = selected_indices[is.na(selected_indices) == F]
+print(paste0("Cells Chosen: ",length(selected_indices)))
+```
+## Step 4: Downstream Analysis(Poisson GLM)
+
+### Full Data (~ 5 minutes)
+
+```{r}
+#get region on 
+nregion = ncol(data$regions)
+nCT = ncol(data$CT)
+#get number of genes 
+ngene = nrow(data$counts)
+#get library size of cells 
+spot_size = colSums(data$counts)
+#save results to a list 
+res = list()
+#start time
+t1 = Sys.time()
+for(i in c(1:ngene)){
+  if(i %%100 == 0){
+    print(paste0("Iteration ",i," out of ",ngene))
+    print(Sys.time() - t1)
+  }
+  #save beta 
+  beta = matrix(NA,nregion ,nCT)
+  #get dimnames of beta 
+  colnames(beta) = colnames(data$CT)
+  rownames(beta) = colnames(data$regions)
+  #standard error matrix 
+  SE = matrix(NA,nregion,nCT)
+  colnames(SE) = colnames(data$CT)
+  rownames(SE) = colnames(data$regions)
+  #get counts
+  Y = data$counts[i,]
+  
+  for(j in c(1:nCT)){
+    #get cells that correspond to that cell type
+    cells = which(data$CT[,j] == 1)
+    #get covariate matrix 
+    X = data$regions[cells,]
+    #subset covariate matrix by valid 
+    ct_ind = which(valid_cov[,j] == 1)
+    X = X[,ct_ind]
+    #get response 
+    y = Y[cells]
+    #get offset 
+    offset_cells = log(spot_size)[cells]
+    #fit model 
+    model = glm(y~X-1+offset(offset_cells),family = "poisson")
+    #save beta 
+    beta[ct_ind,j] = coef(model)
+    #save standard errors 
+    SE[ct_ind,j] = sqrt(diag(vcov(model)))
+  }
+  #save results 
+  res[[i]] = list(beta = beta,SE = SE)
+}
+#start time
+print(Sys.time() - t1)
+
+```
+
+
+
+### Subsampled Data (~ 2 minutes)
+
+```{r}
+#get region on 
+nregion = ncol(data$regions)
+nCT = ncol(data$CT)
+#get number of genes 
+ngene = nrow(data$counts)
+#get library size of cells 
+spot_size = colSums(data$counts)
+#save results to a list 
+res_subsample = list()
+t1 = Sys.time()
+for(i in c(1:ngene)){
+  if(i %%100 == 0){
+    print(paste0("Iteration ",i," out of ",ngene))
+    print(Sys.time() - t1)
+  }
+  #save beta 
+  beta = matrix(NA,nregion ,nCT)
+  #get dimnames of beta 
+  colnames(beta) = colnames(data$CT)
+  rownames(beta) = colnames(data$regions)
+  #standard error matrix 
+  SE = matrix(NA,nregion,nCT)
+  colnames(SE) = colnames(data$CT)
+  rownames(SE) = colnames(data$regions)
+  #get counts
+  Y = data$counts[i,]
+  
+  for(j in c(1:nCT)){
+    #get cells that correspond to that cell type
+    cells = selected_indices[data$CT[selected_indices,j] == 1]
+    #get covariate matrix 
+    X = data$regions[cells,]
+    #subset covariate matrix by valid 
+    ct_ind = which(valid_cov[,j] == 1)
+    X = X[,ct_ind]
+    #get response 
+    y = Y[cells]
+    #get offset 
+    offset_cells = log(spot_size)[cells]
+    #fit model 
+    model = glm(y~X-1+offset(offset_cells),family = "poisson")
+    #save beta 
+    beta[ct_ind,j] = coef(model)
+    #save standard errors 
+    SE[ct_ind,j] = sqrt(diag(vcov(model)))
+  }
+  #save results 
+  res_subsample[[i]] = list(beta = beta,SE = SE)
+}
+
+```
+
+
+
+
+
+## Recall Plot: Contrast Test
+
+### Compute contrast test scores
+
+```{r}
+contrast_test = function(beta,SE,upper = T){
+    pvals = matrix(NA,length(beta),length(beta))
+    for(j in c(1:length(beta))){
+      diff = beta[j] - beta
+      diff_SE = sqrt(SE[j]^2 + SE^2)
+      pvals[,j] = 2*(1-pnorm(abs(diff/diff_SE)))
+    }
+    if(upper){
+      pvals[upper.tri(pvals)] <- NA
+    }
+    diag(pvals) = NA
+    return(pvals)
+  }
+
+#get pvalue list for full data and subsampled data 
+pvalue_subsample = c()
+pvalue_full = c()
+for(j in c(1:ngene)){
+  full_result = res[[j]]
+  subsample_result = res_subsample[[j]]
+  nCT = ncol(full_result$beta)
+  for(k in c(1:nCT)){
+    p_sub = contrast_test(full_result$beta[,k],full_result$SE[,k])
+    p_full = contrast_test(subsample_result$beta[,k],subsample_result$SE[,k])
+    
+    pvalue_subsample = c(pvalue_subsample,p_sub)
+    pvalue_full = c(pvalue_full,p_full)
+  }
+  
+}
+
+
+pvalue_subsample_adj = p.adjust(pvalue_subsample, method = "BH")
+pvalue_full_adj = p.adjust(pvalue_full, method = "BH")
+```
+
+
+### Compute and Plot Recall
+We now adjust our pvalues using the BH procedure and compute the recall, assuming that the results from the full data model are the truth, across a variety of qvalue cutoffs. The x-axis shows the qvalue cutoff that would be used on the original dataset. The y-axis shows the recall on the subsetted dataset if the qvalue cutoff was 0.05.  We see that the recall is nearly perfect no matter what qvalue cutoff is chosen. That is that a standard analysis with 1/3 of the data can identify nearly all effects found in the full dataset.
+```{r,fig.width=6, fig.height=6}
+CT_names = colnames(res[[1]]$beta)
+N = min(1000,sum(pvalue_full_adj[is.na(pvalue_full_adj)==F] <= 0.05))
+
+set.seed(110)
+Nind = 1000
+
+Nindices = floor(seq(1,N,length.out = Nind))
+
+ordered_pvals = sort(pvalue_full_adj[is.na(pvalue_full_adj)==F])
+ordered_pvals = ordered_pvals[ordered_pvals < 0.05]
+
+pval_inds = sort(c(1,sample(c(2:length(ordered_pvals)),N-1,replace = F)))
+
+
+
+
+log_p = log(pvalue_full_adj[is.na(pvalue_full_adj)==F],10)
+log_p = log_p[is.infinite(log_p) == F]
+min_log_p = min(log_p)
+
+
+#get numerator and denominator in recall
+recall = rep(NA,Nind)
+NUM = rep(0,Nind)
+DEN = rep(0,Nind)
+C = rep(0,Nind)
+for(k in c(1:Nind)){
+  #get cutoff value 
+  cutoff = max(min(log_p),ordered_pvals[pval_inds[k]])
+  
+  standard_sig = (pvalue_full_adj <= cutoff & is.na(pvalue_subsample_adj) == F)
+  query_sig = (pvalue_subsample_adj <= 0.05)
+  
+  NUM[k] =  sum(standard_sig * query_sig,na.rm = T)
+  DEN[k] = sum(standard_sig,na.rm = T)
+  recall[k] = NUM[k]/DEN[k]
+  C[k] = log(cutoff,10)
+    if(is.infinite(C[k])){
+      C[k] = min(log_p)
+    }
+}
+  # Example data
+  plot_data <- data.frame(
+    C = C,                # Replace with your actual 'C' values
+    recall = recall # Replace with your actual 'recall' values
+  )
+  
+  # Create the plot
+  PLOT = ggplot(plot_data, aes(x = C, y = recall)) +
+    geom_point() +  # Scatter points
+    geom_line() +   # Optional: Connect points with lines
+    scale_y_continuous(
+      limits = c(0, 1),            # Set y-axis limits
+      breaks = seq(0, 1, by = 0.1) # Add y-axis ticks
+    ) +
+    theme_minimal() +  # Use a clean theme
+    labs(
+      x = "Full Data Log Q-value Cutoff",          # Label for the x-axis
+      y = "Recall",     # Label for the y-axis
+      title = paste0("Recall of Subsetted Data: ")
+    ) +
+    theme(
+      panel.grid.major = element_line(color = "grey80"), # Add a grid
+      panel.grid.minor = element_blank()                 # Optional: Hide minor grids
+    )
+  print(PLOT)
+  
+
+
+```
+
+```{r}
+#compute type 1 error 
+standard_null = (pvalue_full_adj > 0.05 & is.na(pvalue_subsample_adj) == F)
+query_sig = (pvalue_subsample_adj <= 0.05)
+type_1_error = sum(query_sig * standard_null,na.rm = T)/sum(standard_null,na.rm = T)
+#print 
+print(paste0("Type 1 error rate: ",round(type_1_error,2)))
+```
+
+
+
+
+
+
+
+
+
+
+
+
