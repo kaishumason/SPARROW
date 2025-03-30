@@ -21,7 +21,7 @@ expand_covariate_matrix(
 
 \item{family}{Model family: "poisson", "negative binomial", or "binomial"}
 
-\item{keep_coef}{Matrix indicating which coefficients to keep (default: all 1s)}
+\item{keep_coef}{Matrix indicating which coefficients to keep in case one knows what to remove a priori(default: all 1s)}
 
 \item{lib_size}{Library sizes for each sample (default: 1 for all)}
 

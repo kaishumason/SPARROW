@@ -45,5 +45,5 @@ simulate_data(
 A list with simulated y, X, lambda, beta, null_beta, and CT
 }
 \description{
-This function simulates gene expression data using a spot-based model.
+This function simulates gene expression data using a spot-based model
 }

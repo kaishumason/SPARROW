@@ -1,5 +1,5 @@
 ---
-title: "MERFISH_Using_SPARROW"
+title: "Subsampling MERFISH Data Using SPARROW"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Subsampling MERFISH Data Using SPARROW}
@@ -14,16 +14,28 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup}
+You will need the following packages
+```
 library(sparrow)
 library(ggplot2)
 library(dplyr)
 ```
 
+# Reading in Data
+First we read in the merfish data using the function 'read merfish'. This functions returns a list with the following
 
-```{r}
+<details>
+  <summary>Output</summary>
+  + counts: A matrix of gene counts. Of dimension #genes (500) by #cells n (766757)
++ regions: A vector of region ids for each cell. There are p(14) regions.
++ CT: Cell type classification for each cell
+</details>
+
+
+```
 data = read_merfish()
 ```
+
 # Overview
 
 We use a MERFISH colorectal cancer dataset containing 15 cell types and 5 annotated regions. For each gene $g$ we fit the model 
@@ -39,7 +51,7 @@ The original dataset contains approximately 800,000 cells. We will first downsam
 
 
 ## Step 1: One hot encoding region and cell type classification
-```{r}
+```
 data$regions = model.matrix(~ regions - 1, 
                             data = data.frame(regions = data$regions))
 data$CT = model.matrix(~ CT - 1, data = data.frame(CT = data$CT))
@@ -60,8 +72,20 @@ data$CT = data$CT[ind,]
 The model above has a variance covariance matrix equal to $(Z^TAZ)^{-1}$. The matrix $Z$ is equal to 
 $$Z = [X*\lambda_{t_1},...X*\lambda_{t_T}]$$
 i.e. we append $T$ copies of $X$ together, weighted by the deconvolution vectors for each cell type.\
-The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta_{r_i}^t + \log(1000))$. As $X_i\beta_{r_i}^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error. For now, let this bound be equal to $-5$. In general, what one can do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). 
-```{r}
+The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta_{r_i}^t + \log(1000))$. As $X_i\beta_{r_i}^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error.\
+For now,what we will do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). To expand our covariate matrix we use the "expand covariate matrix" function which takes 6 arguments 
+
+<details>
+  <summary>Arguments</summary>
+  + X: The covariate matrix. Of dimension n by p
++ lambda: The deconvolution matrix for each spot. Of dimension n by T
++ family: The family of the downstream glm process that one intends to use.
++ lib size: The library size of each spot. Either a scalar or a vector of length n
++ min reads per 1000: The minimum reads per 1000 that we want to test for. This is only relevant for data selection later.
++ min freq: How many non-zero observations a column in the expanded covariate matrix needs to be valid. Default is 500.
+</details>
+
+```
 #get gene totals and total counts
 gene_totals = rowSums(data$counts)
 total_UMI = sum(data$counts)
@@ -77,30 +101,57 @@ valid_cov = expanded_X$valid
 expanded_X = expanded_X$X
 ```
 
+The output is a list with two entries. Valid is a matrix of dimension $p$ by $T$ that tells us which cell type-covariate combinations have sample size that exceed the min frequency. X holds the expanded covariate matrix, removing the invalid cell type-covariate combinations. 
+
+
+
 
 ## Step 3: Compute Target Standard Error of Subsample
-The goal of SPARROW is to identify a subsample of the data such that the subsampled data and the original data have similar power. This is done by comparing the standard errors in the subsample and the standard errors in the original dataset. Key to this procedure is specifying a minimum effect size $\delta_{\min}$. This is the minimum effect size that one cares about identifying. For example, in the case of poisson regression, one may not care about identifying log fold changes less than a certain amount. In this case let us choose $\delta_{\min} = 0.05$. \
-For covariate $j$, let its standard error on the entire dataset be $\sigma_j$. Under some assumptions one can compute the power when the standard error is $\sigma_j$ and the effect size is $\delta$, $P(\sigma_j,\delta)$. Define $P(\sigma_j)$ as the average power the interval $[\delta_{\min},\delta_{\max,j}]$. $\delta_{max}$ is defined as 
+The goal of SPARROW is to identify a subsample of the data such that the subsampled data and the original data have similar power. This is done by comparing the standard errors in the subsample and the standard errors in the original dataset. Key to this procedure is specifying a minimum effect size $\delta_{\min}$. This is the minimum effect size that one cares about identifying.\
+For example, in the case of poisson regression, one may not care about identifying log fold changes less than a certain amount. In this case let us choose $\delta_{\min} = 0.05$. For covariate $j$, let its standard error on the entire dataset be $\sigma_j$. Under some assumptions one can compute the power when the standard error is $\sigma_j$ and the effect size is $\delta$, $P(\sigma_j,\delta)$. Define $P(\sigma_j)$ as the average power the interval $[\delta_{\min},\delta_{\max,j}]$. $\delta_{max}$ is defined as 
 
 $$\delta_{\max,j} = \min_{\delta}: P(\sigma_j,\delta) > 0.999$$
 
 If $\delta_{\max,j} < \delta_{\min}$, $P(\sigma_j) = 0.999$. Given $P(\sigma_j)$, we can compute 
 $$\sigma_{\text{target},j} = \max_{\sigma_j '}:P(\sigma_j ') > c\times P(\sigma_j)$$
 where $c$ is a constant close to 1 (e.g. 0.99).$\sigma_{\text{target},j}$ represents the largest standard error at which we recover at least $c$ of the power that the original data has for covariate $j$. Below we compute the target standard errors when $c = 0.975$. 
+To compute $\sigma_{\text{target},j}$ we us the "compute target standard error" function. This takes 3 arguments
 
-```{r}
+<details>
+  <summary>Arguments</summary>
+  + X: The expanded covariate matrix. Of dimension n by p
++ min effect: The smallest effect size we wish to detect
++ target power approximation: The power we wish to retain compared to the standard error on the entire dataset be $\sigma_j$
+</details>
+
+```
 target_standard_errors = sparrow::compute_target_standard_error(X = expanded_X,
-                        min_effect = 0.05/sqrt(2),target_power_approx = 0.975)
+                                min_effect = 0.05,target_power_approx = 0.99)
+
 ```
 
 
 
-
 ## Step 4: Subsampling via SPARROW (~2 minutes)
-SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when each individual entry of the diagonal of $(Z_K^TAZ_K)^{-1}$ is less than $\sigma_{\text{target},j}$ for all $j$. Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\\
-We see that we select around 90,00 cells, 1/3 of the original sample.
+SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when
+$$\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} < \sigma_{\text{target},j}$$
 
-```{r}
+Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\
+
+To run data selection we use the "data selection" function. It takes 5 arguments
+
+<details>
+  <summary>Arguments</summary>
+  + X: The expanded covariate matrix. Of dimension p by n
++ data size: The maximum subsample size we want to take
++ min SE: A vector of the target standard errors
++ log: Logical of if we should log progress of data selection 
++ period: If log is TRUE, how often we want to print progress in iterations
+</details>
+
+
+
+```
 selected_indices = sparrow::data_selection(X = t(expanded_X),
                         data_size = 300000,min_SE = target_standard_errors,
                         log = TRUE,period = 10000)
@@ -108,11 +159,13 @@ selected_indices = sparrow::data_selection(X = t(expanded_X),
 selected_indices = selected_indices[is.na(selected_indices) == F]
 print(paste0("Cells Chosen: ",length(selected_indices)))
 ```
+The output is a vector of indices in the order they are selected. Therefore if one initially picks a subset of size 100,000 but then wants to downsample to 50,000 observations, they simply have to take the first 50,000 indices of the output. We see that we select around 90,00 cells, 1/3 of the original sample.
+
 ## Step 4: Downstream Analysis(Poisson GLM)
 
 ### Full Data (~ 5 minutes)
 
-```{r}
+```
 #get region on 
 nregion = ncol(data$regions)
 nCT = ncol(data$CT)
@@ -172,7 +225,7 @@ print(Sys.time() - t1)
 
 ### Subsampled Data (~ 2 minutes)
 
-```{r}
+```
 #get region on 
 nregion = ncol(data$regions)
 nCT = ncol(data$CT)
@@ -233,7 +286,7 @@ for(i in c(1:ngene)){
 
 ### Compute contrast test scores
 
-```{r}
+```
 contrast_test = function(beta,SE,upper = T){
     pvals = matrix(NA,length(beta),length(beta))
     for(j in c(1:length(beta))){
@@ -273,7 +326,7 @@ pvalue_full_adj = p.adjust(pvalue_full, method = "BH")
 
 ### Compute and Plot Recall
 We now adjust our pvalues using the BH procedure and compute the recall, assuming that the results from the full data model are the truth, across a variety of qvalue cutoffs. The x-axis shows the qvalue cutoff that would be used on the original dataset. The y-axis shows the recall on the subsetted dataset if the qvalue cutoff was 0.05.  We see that the recall is nearly perfect no matter what qvalue cutoff is chosen. That is that a standard analysis with 1/3 of the data can identify nearly all effects found in the full dataset.
-```{r,fig.width=6, fig.height=6}
+```
 CT_names = colnames(res[[1]]$beta)
 N = min(1000,sum(pvalue_full_adj[is.na(pvalue_full_adj)==F] <= 0.05))
 
@@ -345,7 +398,7 @@ for(k in c(1:Nind)){
 
 ```
 
-```{r}
+```
 #compute type 1 error 
 standard_null = (pvalue_full_adj > 0.05 & is.na(pvalue_subsample_adj) == F)
 query_sig = (pvalue_subsample_adj <= 0.05)

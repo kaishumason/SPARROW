@@ -6,7 +6,7 @@
 #' @param X Covariate matrix of dimension (n times p)
 #' @param lambda Matrix of cell type proportions (n x k)
 #' @param family Model family: "poisson", "negative binomial", or "binomial"
-#' @param keep_coef Matrix indicating which coefficients to keep (default: all 1s)
+#' @param keep_coef Matrix indicating which coefficients to keep in case one knows what to remove a priori(default: all 1s)
 #' @param lib_size Library sizes for each sample (default: 1 for all)
 #' @param min_reads_per_1000 Minimum reads per 1000 for scaling (default: 1)
 #' @param min_freq Minimum frequency for a feature to be retained (default: 500)
@@ -433,7 +433,7 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 
 #' Simulate gene expression data
 #'
-#' This function simulates gene expression data using a spot-based model.
+#' This function simulates gene expression data using a spot-based model
 #'
 #' @param n Number of data points
 #' @param nct Number of cell types
@@ -522,7 +522,7 @@ simulate_data = function(n,nct,effect_scale,intercept_scale,library_size,
     #simulate response
     y = rnorm(n = length(C),mean = C*library_size,sd = dispersion)
   }else{
-    stop("Family must be one of poisson, binomila, negative binomial, or gaussian")
+    stop("Family must be one of poisson, binomiaa, negative binomial, or gaussian")
   }
 
 

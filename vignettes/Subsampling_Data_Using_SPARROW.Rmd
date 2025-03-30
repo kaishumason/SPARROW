@@ -14,7 +14,8 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup}
+You will need the following packages
+```
 library(sparrow)
 library(spotglm)
 ```
@@ -27,7 +28,7 @@ SPARROW (Submodular Power Adaptive data Reduction for Representative dOWnstream 
 We use the simulate data function in sparrow to simulate 100,000 spots with 8 cell types. Each spot contains at most 2 cell types. We simulate data according to the model 
 $$Y_i \sim Pois(\sum_{t=1}^{T}\lambda_{i,t}\exp(X_i\beta^t + \log(1000)))$$
 Here $Y_i$ is the response (e.g. gene expression) for spot $i$, $X_i$ is the covariate vector for spot $i$,$t$ denotes a cell type, $\lambda_{i,t}$ is the deconvolution estimate for cell type $t$ in spot $i$, and $\beta^t$ is the effect vector for cell type $t$. Note that each cell type gets a different effect vector. Also note that the columns of $X$ are bounded between 0 and 1. Bounding all columns between some interval is recommended to prevent scaling issues and to make interpretation easier. 
-```{r}
+```
 data = sparrow::simulate_data(n = 1e5, nct = 8,effect_scale = 1/5,
                               intercept_scale = 4,
                               library_size = 1000, spot_ct = 2,
@@ -40,9 +41,20 @@ data = sparrow::simulate_data(n = 1e5, nct = 8,effect_scale = 1/5,
 The model above has a variance covariance matrix equal to $(Z^TAZ)^{-1}$. The matrix $Z$ is equal to 
 $$Z = [X*\lambda_{t_1},...X*\lambda_{t_T}]$$
 i.e. we append $T$ copies of $X$ together, weighted by the deconvolution vectors for each cell type.\
-The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta^t + \log(1000))$. As $X_i\beta^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error. For now, let this bound be equal to $-5$. In general, what one can do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). 
+The matrix $A$ is diagonal with $A_{i,i}$ approximately equal to $\exp(X_i\beta^t + \log(1000))$. As $X_i\beta^t$ gets larger, there is more signal. Because we intend to estimate power later, we fix a lower bound for $X_i\beta^t$ in order to place a conservative estimate on the standard error.\
+For now, let this bound be equal to $-5$. In general, what one can do with spatial transcriptomic data is to compute the proportion of total UMIs that come from the each gene,compute the 75th percentile of these values, then convert this into UMIs per 1000 (e.g. $1000*\exp(-5)$). To expand our covariate matrix we use the "expand covariate matrix" function which takes 6 arguments 
 
-```{r}
+<details>
+  <summary>Arguments</summary>
+  + X: The covariate matrix. Of dimension n by p
++ lambda: The deconvolution matrix for each spot. Of dimension n by T
++ family: The family of the downstream glm process that one intends to use.
++ lib size: The library size of each spot. Either a scalar or a vector of length n
++ min reads per 1000: The minimum reads per 1000 that we want to test for. This is only relevant for data selection later.
++ min freq: How many non-zero observations a column in the expanded covariate matrix needs to be valid. Default is 500.
+</details>
+
+```
 expanded_X = sparrow::expand_covariate_matrix(X = data$X, lambda = data$lambda,
                                             family = "poisson",lib_size = 1000,
                                             min_reads_per_1000 = 1000*exp(-5))
@@ -50,6 +62,9 @@ valid = expanded_X$valid
 expanded_X = expanded_X$X
 
 ```
+
+The output is a list with two entries. Valid is a matrix of dimension $p$ by $T$ that tells us which cell type-covariate combinations have sample size that exceed the min frequency. X holds the expanded covariate matrix, removing the invalid cell type-covariate combinations. 
+
 
 
 ## Step 3: Compute Target Standard Error of Subsample
@@ -61,35 +76,55 @@ $$\delta_{\max,j} = \min_{\delta}: P(\sigma_j,\delta) > 0.999$$
 
 If $\delta_{\max,j} < \delta_{\min}$, $P(\sigma_j) = 0.999$. Given $P(\sigma_j)$, we can compute 
 $$\sigma_{\text{target},j} = \max_{\sigma_j '}:P(\sigma_j ') > c\times P(\sigma_j)$$
-where $c$ is a constant close to 1 (e.g. 0.99).$\sigma_{\text{target},j}$ represents the largest standard error at which we recover at least $c$ of the power that the original data has for covariate $j$. Below we compute the target standard errors when $c = 0.99$. 
+where $c$ is a constant close to 1 (e.g. 0.99).$\sigma_{\text{target},j}$ represents the largest standard error at which we recover at least $c$ of the power that the original data has for covariate $j$. Below we compute the target standard errors when $c = 0.99$. To compute $\sigma_{\text{target},j}$ we us the "compute target standard error" function. This takes 3 arguments
 
-```{r}
+<details>
+  <summary>Arguments</summary>
+  + X: The expanded covariate matrix. Of dimension n by p
++ min effect: The smallest effect size we wish to detect
++ target power approximation: The power we wish to retain compared to the standard error on the entire dataset be $\sigma_j$
+</details>
+
+```
 target_standard_errors = sparrow::compute_target_standard_error(X = expanded_X,
                                 min_effect = 0.05,target_power_approx = 0.99)
 
 ```
-
+The output is a vector of target standard errors.
 
 ## Step 4: Subsampling via SPARROW (~1 minute)
 
-SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when each individual entry of the diagonal of $(Z_K^TAZ_K)^{-1}$ is less than $\sigma_{\text{target},j}$ for all $j$. Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\\
+SPARROW is a subsampling algorithm that attempts to minimize the trace of $(Z_K^TAZ_K)^{-1}$. Here $Z_K$ is a submatrix of $Z$ containing $K$ rows. This is done via stochastic greedy selection which can identify solutions that are at least $1-1/e$ efficient. A natural stopping criterion is when
+$$\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} < \sigma_{\text{target},j}$$
+
+Note that when $\delta_{\max,j} < \delta_{\min}$, the amount of data needed to achieve the target standard error plateaus. This is what characterizes to the ultra scalability of SPARROW.\
+To run data selection we use the "data selection" function. It takes 5 arguments
+
+<details>
+  <summary>Arguments</summary>
+  + X: The expanded covariate matrix. Of dimension p by n
++ data size: The maximum subsample size we want to take
++ min SE: A vector of the target standard errors
++ log: Logical of if we should log progress of data selection 
++ period: If log is TRUE, how often we want to print progress in iterations
+</details>
 
 
-```{r}
+
+```
 selected_indices = sparrow::data_selection(X = t(expanded_X),
                         data_size = 80000,min_SE = target_standard_errors,
                         log = TRUE,period = 5000)
 selected_indices = selected_indices[is.na(selected_indices) == F]
 print(paste0("#Cells Subsampled: ", length(selected_indices)))
 ```
-Note here that we select approximately 30,000 out of 100,000 total spots. 
+The output is a vector of indices in the order they are selected. Therefore if one initially picks a subset of size 100,000 but then wants to downsample to 50,000 observations, they simply have to take the first 50,000 indices of the output. Note here that we select approximately 30,000 out of 100,000 total spots. 
 
 ## Step 4: Example Downstream Analysis (~5 minuts)
 
 To test the performance of our subsampled dataset, we will run spotGLM on both the original dataset and the subsampled data. We see that the power on both datasets are near identical.
 
-```{r}
-library(spotglm)
+```
 nsim = 25
 full_power = rep(NA,nsim)
 subset_power = rep(NA,nsim)
@@ -134,7 +169,7 @@ print(Sys.time() - t1)
 ```
 
 
-```{r}
+```
 print(paste0("Mean Power on Full Data: ", round(mean(full_power),3)))
 print(paste0("Mean Power on Subsetted Data: ", round(mean(subset_power),3)))
 ```
