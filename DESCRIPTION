@@ -1,11 +1,10 @@
 Package: sparrow
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Large Scale Data Downsampling Method
 Version: 0.1.0
 Author: Kaishu Mason
 Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: SPARROW(Submodular Power Adaptive data Reduction for Representative dOWnstream analysis) is a method for subsampling large scale data in such a way that most of the statistical power is preserved with respect to some downstream analysis.
 License: MIT
 Encoding: UTF-8
 LazyData: true
