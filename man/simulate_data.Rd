@@ -7,12 +7,12 @@
 simulate_data(
   n,
   nct,
-  effect_scale,
-  intercept_scale,
-  library_size,
-  spot_ct,
-  p,
-  num_null = 3,
+  effect_range,
+  intercept_range,
+  library_size = 500,
+  spot_ct = min(2, nct),
+  p = 6,
+  num_null = 2,
   prob_ct = NULL,
   family = "poisson",
   dispersion = NULL
@@ -23,11 +23,11 @@ simulate_data(
 
 \item{nct}{Number of cell types}
 
-\item{effect_scale}{Scale for effect sizes}
+\item{effect_range}{Range of effect sizes (effect sizes drawn uniformly on this interval)}
 
-\item{intercept_scale}{Scale for intercepts}
+\item{intercept_range}{Range for intercepts (intercept sizes drawn uniformly on this interval)}
 
-\item{library_size}{Number of trancripts per cell/spot}
+\item{library_size}{Number of transcripts per cell/spot}
 
 \item{spot_ct}{Number of cell types per spot}
 

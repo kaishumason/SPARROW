@@ -5,25 +5,21 @@
 #'
 #' @param X Covariate matrix of dimension (n times p)
 #' @param lambda Matrix of cell type proportions (n x k)
-#' @param family Model family: "poisson", "negative binomial", or "binomial"
-#' @param keep_coef Matrix indicating which coefficients to keep in case one knows what to remove a priori(default: all 1s)
+#' @param family Model family: "poisson", "negative binomial", or "gaussian"
+#' @param keep_coef Matrix (p by k) indicating which coefficients to keep in case one knows what to remove a priori(default: all TRUEs)
 #' @param lib_size Library sizes for each sample (default: 1 for all)
-#' @param min_reads_per_1000 Minimum reads per 1000 for scaling (default: 1)
-#' @param min_freq Minimum frequency for a feature to be retained (default: 500)
+#' @param min_reads_per_1000 If family == "poisson" or "negative binomial" Minimum reads per 1000 for robust scaling (default: 1)
+#' @param max_noise_sd If family == "gaussian" maximum standard deviation of the error term to be used for robust scaling (default: 1)
 #'
 #' @return A scaled and expanded covariate matrix
 #' @export
-expand_covariate_matrix = function(X,lambda,family = "gaussian",keep_coef = matrix(1,ncol(X),ncol(lambda)),
-                                   lib_size = rep(1,nrow(X)), min_reads_per_1000 = 1,min_freq = 500){
+expand_covariate_matrix = function(X,lambda,family = "gaussian",keep_coef = matrix(TRUE,ncol(X),ncol(lambda)),lib_size = rep(1,nrow(X)), min_reads_per_1000 = 1,max_noise_sd = 1){
   #get scaled library sizes
   if(family == "poisson" | family == "negative binomial"){
     scaled_spot_size = sqrt((lib_size/1000)*min_reads_per_1000)
     X = sweep(X,1,scaled_spot_size,"*")
-  } else if(family == "binomial"){
-    scaled_spot_size = sqrt((lib_size/1000)*min_reads_per_1000)
-    X = sweep(X,1,scaled_spot_size,"*")
-  }else if(family == "gaussian"){
-    X = X
+  } else if(family == "gaussian"){
+    X = X/max_noise_sd
   }else{
     stop("family should be one of poisson, negative binomial, or gaussian\n
         If you don't wish to apply any transformation to X, use gaussian(default)")
@@ -34,7 +30,7 @@ expand_covariate_matrix = function(X,lambda,family = "gaussian",keep_coef = matr
   #iterate over each cell type
   for(j in c(1:ncol(lambda))){
     #get which index to remove
-    bad_ind = which(keep_coef[,j] == 0)
+    bad_ind = which(keep_coef[,j] == FALSE)
     #get scaled X
     scaled_X = sweep(X,1,lambda[,j],"*")
     if(is.null(colnames(lambda)) == F & is.null(colnames(X)) == F){
@@ -48,15 +44,8 @@ expand_covariate_matrix = function(X,lambda,family = "gaussian",keep_coef = matr
     big_X[[j]] = scaled_X
   }
   big_X = do.call(cbind, big_X)
-  #remove those columns that don't appear enough
-  freq = apply(big_X,2,function(x){sum(x != 0)})
-  big_X = big_X[,(freq >= min_freq)]
 
-  #return valid covariates
-  valid = matrix(1,ncol(X),ncol(lambda))
-  valid[(freq < min_freq)] = 0
-
-  return(list(X = big_X,valid = valid))
+  return(big_X)
 }
 
 
@@ -120,16 +109,16 @@ compute_target_standard_error = function(X,min_effect,target_power_approx,alpha,
 #' Performs greedy data selection with an early stopping criterion when standard errors converge.
 #'
 #' @param X Covariate matrix (p x n)
-#' @param data_size Number of data points to select
-#' @param min_SE Target standard errors for convergence
+#' @param max_data_size maximum number of data points to select
+#' @param min_standard_error Target standard errors for convergence
 #' @param log Whether to print progress
 #' @param period If log = TRUE, print progress every period
 #'
 #' @return A vector of selected data point indices
 #' @export
-data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
-  #scale by min_SE
-  X = sweep(X,1,min_SE,"*")
+data_selection = function(X,max_data_size,min_standard_error = NULL,log = FALSE,period = 1000){
+  #scale by min_standard_error
+  X = sweep(X,1,min_standard_error,"*")
   #get number of points and number of covariates
   n = ncol(X)
   p = nrow(X)
@@ -138,26 +127,26 @@ data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
   #keep track of how many covariates converged
   conv_cov = c()
   #get minimum batch size such that we sacrifice less than 1/1000 of efficiency
-  subsample_size = ceiling(log(1000)*n/data_size)
+  subsample_size = ceiling(log(1000)*n/max_data_size)
   #get initial varcov matrix
   initial_sigma = diag(x = 100, p)
   #initialize list of points we choose
-  points_added = rep(NA,data_size)
+  points_added = rep(NA,max_data_size)
   #keep track of how mnay points we have left to pick from
   valid_points_left = c(1:n)
   invalid_points_left = c()
 
   print("starting")
   t1 = Sys.time()
-  for(j in c(1:data_size)){
+  for(j in c(1:max_data_size)){
     if(length(conv_cov) == p){
       print("ended early")
       break
     }
     if(log & j%%period == 0){
-      print(paste0("On iteration ",j," out of ",data_size))
-      if(is.null(min_SE) == FALSE){
-        print("Ratio of Current SE to Target SE")
+      print(paste0("On iteration ",j," out of ",max_data_size))
+      if(is.null(min_standard_error) == FALSE){
+        print("Ratio of Current standard error to Target standard error")
         stand_errs = sqrt(diag(initial_sigma))
         print(stand_errs)
       }
@@ -194,7 +183,7 @@ data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
     x = t(big_X_temp[ind,,drop = FALSE])
     A = initial_sigma%*%x
     initial_sigma = initial_sigma - A%*%t(A)/(1 + t(x)%*%A)[1,1]
-    if(is.null(min_SE) == FALSE){
+    if(is.null(min_standard_error) == FALSE){
       stand_errs = sqrt(diag(initial_sigma))
       conv_cov_curr = which(stand_errs <=1)
       new_covs = setdiff(conv_cov_curr, conv_cov)
@@ -217,7 +206,7 @@ data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
     #update converged convs
     conv_cov <- conv_cov_curr
     #update weights if needed
-    if(is.null(min_SE) == FALSE){
+    if(is.null(min_standard_error) == FALSE){
       if(length(removed_covs) > 0 | length(new_covs) > 0){
         points_left = c(valid_points_left,invalid_points_left)
         valid_points_left = points_left[freqs[points_left] != 0]
@@ -235,7 +224,7 @@ data_selection = function(X,data_size,min_SE = NULL,log = FALSE,period = 1000){
 #' @param X Covariate matrix (p x n)
 #' @param data_size Number of data points to select
 #' @param log Whether to print progress every 1000 iterations
-#' @param min_SE Optional vector of minimum standard errors for convergence
+#' @param period If log = TRUE, print progress every period
 #'
 #' @return A vector of selected data point indices
 #' @export
@@ -437,9 +426,9 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 #'
 #' @param n Number of data points
 #' @param nct Number of cell types
-#' @param effect_scale Scale for effect sizes
-#' @param intercept_scale Scale for intercepts
-#' @param library_size Number of trancripts per cell/spot
+#' @param effect_range Range of effect sizes (effect sizes drawn uniformly on this interval)
+#' @param intercept_range Range for intercepts (intercept sizes drawn uniformly on this interval)
+#' @param library_size Number of transcripts per cell/spot
 #' @param spot_ct Number of cell types per spot
 #' @param p Number of covariates
 #' @param num_null Number of null coefficients to include
@@ -451,8 +440,8 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 #' @importFrom gtools rdirichlet
 #' @importFrom stats pnorm qnorm rbinom rnorm rpois runif
 #' @export
-simulate_data = function(n,nct,effect_scale,intercept_scale,library_size,
-                         spot_ct,p,num_null = 3,prob_ct = NULL,family = "poisson",
+simulate_data = function(n,nct,effect_range,intercept_range,library_size = 500,
+                         spot_ct = min(2,nct),p = 6,num_null = 2,prob_ct = NULL,family = "poisson",
                          dispersion = NULL){
   if(is.null(prob_ct)){
     prob_ct = rep(1,nct)
@@ -461,10 +450,10 @@ simulate_data = function(n,nct,effect_scale,intercept_scale,library_size,
   X = matrix(rnorm(p*n)*rbinom(p*n,1,prob = 0.25),n,p)
   X = cbind(1,X)
   #true beta
-  beta = matrix((rnorm(nct*ncol(X))),ncol(X),nct)*effect_scale
+  beta = matrix((runif(nct*ncol(X), effect_range[1], effect_range[2])),ncol(X),nct)
   null_beta = matrix(0, dim(beta)[1],dim(beta)[2])
   #set first row (intercept) to be large
-  beta[1,] = -intercept_scale*abs(runif(nct,1,1.5))
+  beta[1,] = (runif(nct,intercept_range[1],intercept_range[2]))
   #make random covariates null
   null_cand = nct*ncol(X)
   #get intercept indices

@@ -13,7 +13,7 @@ data_selection_fixed(X, data_size, log = FALSE, period = 1000)
 
 \item{log}{Whether to print progress every 1000 iterations}
 
-\item{min_SE}{Optional vector of minimum standard errors for convergence}
+\item{period}{If log = TRUE, print progress every period}
 }
 \value{
 A vector of selected data point indices

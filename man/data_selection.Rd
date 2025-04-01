@@ -4,14 +4,20 @@
 \alias{data_selection}
 \title{Select Data with Early Stopping Based on Standard Errors}
 \usage{
-data_selection(X, data_size, min_SE = NULL, log = FALSE, period = 1000)
+data_selection(
+  X,
+  max_data_size,
+  min_standard_error = NULL,
+  log = FALSE,
+  period = 1000
+)
 }
 \arguments{
 \item{X}{Covariate matrix (p x n)}
 
-\item{data_size}{Number of data points to select}
+\item{max_data_size}{maximum number of data points to select}
 
-\item{min_SE}{Target standard errors for convergence}
+\item{min_standard_error}{Target standard errors for convergence}
 
 \item{log}{Whether to print progress}
 

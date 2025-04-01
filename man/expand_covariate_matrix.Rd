@@ -8,10 +8,10 @@ expand_covariate_matrix(
   X,
   lambda,
   family = "gaussian",
-  keep_coef = matrix(1, ncol(X), ncol(lambda)),
+  keep_coef = matrix(TRUE, ncol(X), ncol(lambda)),
   lib_size = rep(1, nrow(X)),
   min_reads_per_1000 = 1,
-  min_freq = 500
+  max_noise_sd = 1
 )
 }
 \arguments{
@@ -19,15 +19,15 @@ expand_covariate_matrix(
 
 \item{lambda}{Matrix of cell type proportions (n x k)}
 
-\item{family}{Model family: "poisson", "negative binomial", or "binomial"}
+\item{family}{Model family: "poisson", "negative binomial", or "gaussian"}
 
-\item{keep_coef}{Matrix indicating which coefficients to keep in case one knows what to remove a priori(default: all 1s)}
+\item{keep_coef}{Matrix (p by k) indicating which coefficients to keep in case one knows what to remove a priori(default: all TRUEs)}
 
 \item{lib_size}{Library sizes for each sample (default: 1 for all)}
 
-\item{min_reads_per_1000}{Minimum reads per 1000 for scaling (default: 1)}
+\item{min_reads_per_1000}{If family == "poisson" or "negative binomial" Minimum reads per 1000 for robust scaling (default: 1)}
 
-\item{min_freq}{Minimum frequency for a feature to be retained (default: 500)}
+\item{max_noise_sd}{If family == "gaussian" maximum standard deviation of the error term to be used for robust scaling (default: 1)}
 }
 \value{
 A scaled and expanded covariate matrix
