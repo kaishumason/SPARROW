@@ -95,10 +95,9 @@ cutoff = quantile(log(gene_totals/total_UMI),0.75)
 #make expanded covariate matrix 
 expanded_X = sparrow::expand_covariate_matrix(X = data$regions, lambda = data$CT,
                             family = "poisson",lib_size = colSums(data$counts),
-                                        min_reads_per_1000 = 1000*exp(cutoff),
-                                        min_freq = 250)
-valid_cov = expanded_X$valid
-expanded_X = expanded_X$X
+                                        min_reads_per_1000 = 1000*exp(cutoff))
+valid_cov = matrix(colSums(expanded_X) > 250,ncol(data$regions),ncol(data$CT))
+expanded_X = expanded_X[,colSums(expanded_X) > 250]
 ```
 
 The output is a list with two entries. Valid is a matrix of dimension $p$ by $T$ that tells us which cell type-covariate combinations have sample size that exceed the min frequency. X holds the expanded covariate matrix, removing the invalid cell type-covariate combinations. 
@@ -153,7 +152,7 @@ To run data selection we use the "data selection" function. It takes 5 arguments
 
 ```
 selected_indices = sparrow::data_selection(X = t(expanded_X),
-                        data_size = 300000,min_SE = target_standard_errors,
+                        max_data_size = 300000,min_standard_error = target_standard_errors,
                         log = TRUE,period = 10000)
 
 selected_indices = selected_indices[is.na(selected_indices) == F]

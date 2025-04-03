@@ -29,8 +29,8 @@ We use the simulate data function in sparrow to simulate 100,000 spots with 8 ce
 $$Y_i \sim Pois(\sum_{t=1}^{T}\lambda_{i,t}\exp(X_i\beta^t + \log(1000)))$$
 Here $Y_i$ is the response (e.g. gene expression) for spot $i$, $X_i$ is the covariate vector for spot $i$,$t$ denotes a cell type, $\lambda_{i,t}$ is the deconvolution estimate for cell type $t$ in spot $i$, and $\beta^t$ is the effect vector for cell type $t$. Note that each cell type gets a different effect vector. Also note that the columns of $X$ are bounded between 0 and 1. Bounding all columns between some interval is recommended to prevent scaling issues and to make interpretation easier. 
 ```
-data = sparrow::simulate_data(n = 1e5, nct = 8,effect_scale = 1/5,
-                              intercept_scale = 4,
+data = sparrow::simulate_data(n = 1e5, nct = 8,effect_range = c(-0.2,0.2),min_effect = 0.05,
+                              intercept_range = c(-6,-4),
                               library_size = 1000, spot_ct = 2,
                               p = 8,num_null = 2,prob_ct = NULL)
 
@@ -58,9 +58,6 @@ For now, let this bound be equal to $-5$. In general, what one can do with spati
 expanded_X = sparrow::expand_covariate_matrix(X = data$X, lambda = data$lambda,
                                             family = "poisson",lib_size = 1000,
                                             min_reads_per_1000 = 1000*exp(-5))
-valid = expanded_X$valid
-expanded_X = expanded_X$X
-
 ```
 
 The output is a list with two entries. Valid is a matrix of dimension $p$ by $T$ that tells us which cell type-covariate combinations have sample size that exceed the min frequency. X holds the expanded covariate matrix, removing the invalid cell type-covariate combinations. 
@@ -113,7 +110,8 @@ To run data selection we use the "data selection" function. It takes 5 arguments
 
 ```
 selected_indices = sparrow::data_selection(X = t(expanded_X),
-                        data_size = 80000,min_SE = target_standard_errors,
+                        max_data_size = 80000,
+                        min_standard_error = target_standard_errors,
                         log = TRUE,period = 5000)
 selected_indices = selected_indices[is.na(selected_indices) == F]
 print(paste0("#Cells Subsampled: ", length(selected_indices)))
@@ -142,8 +140,8 @@ for(j in c(1:nsim)){
   #run spotglm on original dataset
   model_full = spotglm::run_model(y = data$y, X = data$X, lambda = data$lambda, 
                         offset = rep(log(1000),length(data$y)),
-                        family = "spot poisson",initialization = "intercept",
-                        intercept_col = 1,batch_size = 500,n_epochs = 100,
+                        family = "spot poisson",initialization = T,
+                        batch_size = 500,n_epochs = 100,
                         improvement_threshold = 1e-6,max_conv = 20)
 
   #run spotglm on subsetted data
@@ -151,8 +149,8 @@ for(j in c(1:nsim)){
                         X = data$X[selected_indices,], 
                         lambda = data$lambda[selected_indices,], 
                         offset=rep(log(1000),length(data$y))[selected_indices],
-                        family = "spot poisson",initialization = "intercept",
-                        intercept_col = 1,batch_size = 500,n_epochs = 100,
+                        family = "spot poisson",initialization = T,
+                        batch_size = 500,n_epochs = 100,
                         improvement_threshold = 1e-6,max_conv = 20)
   
   #compute power 

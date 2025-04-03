@@ -441,7 +441,7 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 #' @importFrom gtools rdirichlet
 #' @importFrom stats pnorm qnorm rbinom rnorm rpois runif
 #' @export
-simulate_data = function(n,nct,effect_range,intercept_range,min_effect = 0.05,library_size = 500,
+simulate_data = function(n,nct,effect_range,intercept_range,min_effect = 0,library_size = 500,
                          spot_ct = min(2,nct),p = 6,num_null = 2,prob_ct = NULL,family = "poisson",
                          dispersion = 1){
   if(is.null(prob_ct)){

@@ -9,7 +9,7 @@ simulate_data(
   nct,
   effect_range,
   intercept_range,
-  min_effect = 0.05,
+  min_effect = 0,
   library_size = 500,
   spot_ct = min(2, nct),
   p = 6,
