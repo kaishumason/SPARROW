@@ -4,7 +4,7 @@
 \alias{SE_optimizer}
 \title{Compute Minimum Standard Error for Given Power and Effect}
 \usage{
-SE_optimizer(min_effect, pow, alpha, acc = 0.001)
+SE_optimizer(min_effect, pow, alpha = 0.05, acc = 0.001)
 }
 \arguments{
 \item{min_effect}{Minimum effect size}

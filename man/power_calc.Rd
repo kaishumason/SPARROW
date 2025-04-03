@@ -4,7 +4,7 @@
 \alias{power_calc}
 \title{Compute Statistical Power}
 \usage{
-power_calc(SE, effect, alpha)
+power_calc(SE, effect, alpha = 0.05)
 }
 \arguments{
 \item{SE}{Standard error}

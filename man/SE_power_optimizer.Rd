@@ -9,7 +9,7 @@ SE_power_optimizer(
   target_power_approx,
   effect_min,
   effect_max,
-  alpha,
+  alpha = 0.05,
   acc = 0.001
 )
 }

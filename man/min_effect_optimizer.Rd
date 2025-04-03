@@ -4,7 +4,7 @@
 \alias{min_effect_optimizer}
 \title{Compute Minimum Detectable Effect Size}
 \usage{
-min_effect_optimizer(SE, pow, alpha, acc = 0.001)
+min_effect_optimizer(SE, pow, alpha = 0.05, acc = 0.001)
 }
 \arguments{
 \item{SE}{Standard error}

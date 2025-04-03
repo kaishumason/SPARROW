@@ -299,7 +299,7 @@ data_selection_fixed = function(X,data_size,log = FALSE,period = 1000){
 #'
 #' @importFrom stats pnorm qnorm
 #' @keywords internal
-SE_optimizer = function(min_effect,pow,alpha,acc = 1e-3){
+SE_optimizer = function(min_effect,pow,alpha = 0.05,acc = 1e-3){
   #assume effect
   lower = 0
   upper = 1000
@@ -328,7 +328,7 @@ SE_optimizer = function(min_effect,pow,alpha,acc = 1e-3){
 #'
 #' @importFrom stats pnorm qnorm
 #' @keywords internal
-min_effect_optimizer = function(SE,pow,alpha,acc = 1e-3){
+min_effect_optimizer = function(SE,pow,alpha = 0.05,acc = 1e-3){
   #assume effect
   lower = 0
   upper = 1000
@@ -356,7 +356,7 @@ min_effect_optimizer = function(SE,pow,alpha,acc = 1e-3){
 #'
 #' @importFrom stats pnorm qnorm
 #' @keywords internal
-power_calc = function(SE,effect,alpha){
+power_calc = function(SE,effect,alpha = 0.05){
   z = qnorm(1-alpha/2)
   1 - pnorm(z - effect/SE) - pnorm(-z - effect/SE)
 
@@ -396,7 +396,7 @@ power_integral = function(SE,effect_min,effect_max,alpha){
 #' @param acc Accuracy for numeric optimization
 #'
 #' @keywords internal
-SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_max,alpha,acc = 1e-3){
+SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_max,alpha = 0.05,acc = 1e-3){
   upper = 100
   lower = 1
   #get target power
@@ -428,29 +428,69 @@ SE_power_optimizer = function(target_SE,target_power_approx,effect_min,effect_ma
 #' @param nct Number of cell types
 #' @param effect_range Range of effect sizes (effect sizes drawn uniformly on this interval)
 #' @param intercept_range Range for intercepts (intercept sizes drawn uniformly on this interval)
+#' @param min_effect Minimum absolute value of effect sizes.
 #' @param library_size Number of transcripts per cell/spot
 #' @param spot_ct Number of cell types per spot
 #' @param p Number of covariates
 #' @param num_null Number of null coefficients to include
 #' @param prob_ct Optional probabilities for cell type sampling
 #' @param family The data generating distribution. One of poisson, negative binomial,binomial, and gaussian
-#' @param dispersion Dispersion parameter for NB or Gaussian family
+#' @param dispersion Dispersion parameter for NB or Gaussian family. Size parameter for NB and sd for Gaussian. Default: 1
 #'
 #' @return A list with simulated y, X, lambda, beta, null_beta, and CT
 #' @importFrom gtools rdirichlet
 #' @importFrom stats pnorm qnorm rbinom rnorm rpois runif
 #' @export
-simulate_data = function(n,nct,effect_range,intercept_range,library_size = 500,
+simulate_data = function(n,nct,effect_range,intercept_range,min_effect = 0.05,library_size = 500,
                          spot_ct = min(2,nct),p = 6,num_null = 2,prob_ct = NULL,family = "poisson",
-                         dispersion = NULL){
+                         dispersion = 1){
   if(is.null(prob_ct)){
     prob_ct = rep(1,nct)
   }
+  #reorder effect range and intercept range
+  effect_range = sort(effect_range)
+  intercept_range = sort(intercept_range)
+  #function to sample from ranges
+  sample_from_interval_diff <- function(a, b, c, n = 1) {
+    interval_difference <- function(a, b, c) {
+      if (a > b) stop("Error: a must be less than b.")
+      intervals <- list()
+      if (b <= -c || a >= c) {
+        intervals <- list(c(a, b))
+      } else {
+        if (a < -c) intervals <- append(intervals, list(c(a, -c)))
+        if (b > c) intervals <- append(intervals, list(c(c, b)))
+      }
+      intervals
+    }
+
+    intervals <- interval_difference(a, b, c)
+
+    if (length(intervals) == 0) {
+      stop("No intervals available for sampling. Make sure maximum of effect range is not less than min effect.")
+    }
+
+    # Compute lengths of intervals
+    lengths <- sapply(intervals, function(x) x[2] - x[1])
+    probs <- lengths / sum(lengths)
+
+    # Sample intervals proportional to their lengths
+    chosen_intervals <- sample(seq_along(intervals), size = n, replace = TRUE, prob = probs)
+
+    # Sample uniformly within chosen intervals
+    samples <- sapply(chosen_intervals, function(idx) {
+      runif(1, intervals[[idx]][1], intervals[[idx]][2])
+    })
+
+    return(samples)
+  }
+
   #covariate matrix
   X = matrix(rnorm(p*n)*rbinom(p*n,1,prob = 0.25),n,p)
   X = cbind(1,X)
   #true beta
-  beta = matrix((runif(nct*ncol(X), effect_range[1], effect_range[2])),ncol(X),nct)
+  beta_samples = sample_from_interval_diff(a = effect_range[1],b = effect_range[2],c = min_effect, n = nct*ncol(X))
+  beta = matrix(beta_samples,ncol(X),nct)
   null_beta = matrix(0, dim(beta)[1],dim(beta)[2])
   #set first row (intercept) to be large
   beta[1,] = (runif(nct,intercept_range[1],intercept_range[2]))

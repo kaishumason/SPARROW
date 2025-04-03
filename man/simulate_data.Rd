@@ -9,13 +9,14 @@ simulate_data(
   nct,
   effect_range,
   intercept_range,
+  min_effect = 0.05,
   library_size = 500,
   spot_ct = min(2, nct),
   p = 6,
   num_null = 2,
   prob_ct = NULL,
   family = "poisson",
-  dispersion = NULL
+  dispersion = 1
 )
 }
 \arguments{
@@ -26,6 +27,8 @@ simulate_data(
 \item{effect_range}{Range of effect sizes (effect sizes drawn uniformly on this interval)}
 
 \item{intercept_range}{Range for intercepts (intercept sizes drawn uniformly on this interval)}
+
+\item{min_effect}{Minimum absolute value of effect sizes.}
 
 \item{library_size}{Number of transcripts per cell/spot}
 
@@ -39,7 +42,7 @@ simulate_data(
 
 \item{family}{The data generating distribution. One of poisson, negative binomial,binomial, and gaussian}
 
-\item{dispersion}{Dispersion parameter for NB or Gaussian family}
+\item{dispersion}{Dispersion parameter for NB or Gaussian family. Size parameter for NB and sd for Gaussian. Default: 1}
 }
 \value{
 A list with simulated y, X, lambda, beta, null_beta, and CT
