@@ -44,7 +44,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/kaishumason/SPARROW/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="nav-link" href="https://github.com/kaishumason/SPARROW/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -53,19 +53,41 @@
 </nav><div class="container template-home">
 <div class="row">
   <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="sparrow">SPARROW<a class="anchor" aria-label="anchor" href="#sparrow"></a>
+<div class="page-header"><h1 id="id_-sparrow">
+<img src="reference/figures/SPARROW_logo.png" width="40" style="vertical-align: middle; margin-right: 10px;"> SPARROW<a class="anchor" aria-label="anchor" href="#id_-sparrow"></a>
 </h1></div>
 <p><strong>The sparrow may be small, but it is fully equipped with all vital organs…</strong></p>
 <p>SPARROW is a method for subsampling large scale data to obtain a lightweight presentation such that most of the statistical power is preserved with respect to downstream analysis.</p>
-<p>It was originally designed for large scale spatial transcriptomics data analysis, to be used in conjunction with <a href="https://kaishumason.github.io/spotGLM/" class="external-link">the spotGLM package</a> for identifying spatial signals. However, it can be used as a general purpose data selection tool.</p>
-<p>The name “sparrow” comes from the Chinese idiom,<a href="https://en.wiktionary.org/wiki/%E9%BA%BB%E9%9B%80%E9%9B%96%E5%B0%8F%EF%BC%8C%E4%BA%94%E8%87%9F%E4%BF%B1%E5%85%A8#Chinese" class="external-link">“the sparrow may be small, but it is fully equiped with all of the vital organs”</a>. The letters in the acronym stand for: <strong>S</strong>ubmodular <strong>P</strong>ower-<strong>A</strong>daptive <strong>R</strong>eduction for <strong>R</strong>epresentative D<strong>o</strong>wnstream <strong>W</strong>orkflows.</p>
-<p><a href="https://kaishumason.github.io/SPARROW/" class="external-link">See website for full tutorial.</a></p>
+<p>The name “sparrow” comes from the Chinese idiom, <a href="https://en.wiktionary.org/wiki/%E9%BA%BB%E9%9B%80%E9%9B%96%E5%B0%8F%EF%BC%8C%E4%BA%94%E8%87%9F%E4%BF%B1%E5%85%A8#Chinese" class="external-link">“the sparrow may be small, but it is fully equiped with all of the vital organs”</a>. The letters in the acronym stand for: <strong>S</strong>ubmodular <strong>P</strong>ower-<strong>A</strong>daptive <strong>R</strong>eduction for <strong>R</strong>epresentative D<strong>o</strong>wnstream <strong>W</strong>orkflows.</p>
+<div class="section level2">
+<h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
+</h2>
+<p>To install SPARROW from GitHub:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Install from GitHub</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"devtools"</span><span class="op">)</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html" class="external-link">install_github</a></span><span class="op">(</span><span class="st">"kaishumason/SPARROW"</span><span class="op">)</span></span></code></pre></div>
+<p>SPARROW can be paired with <a href="http://kaishumason.github.io/SpotGLM/" class="external-link">spotGLM</a> for fast and scalable spatial omic data analysis.<br>
+We also recommend for you to install spotGLM and check out the <a href="https://kaishumason.github.io/SpotGLM/index.html" class="external-link">tutorials</a> from there:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Install from GitHub</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html" class="external-link">install_github</a></span><span class="op">(</span><span class="st">"kaishumason/spotGLM"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="getting-started">Getting Started<a class="anchor" aria-label="anchor" href="#getting-started"></a>
+</h2>
+<p>Please follow these tutorials to get started on your data:</p>
+<p><a href="articles/Subsampling_Data_Using_SPARROW.html">Demonstration on a MERFISH dataset</a></p>
+<p><a href="articles/Subsampling_Data_Using_SPARROW.html">Demonstration on a simulated spatial-barcoding data set that requires deconvolution</a></p>
+<p><a href="https://kaishumason.github.io/SpotGLM/articles/Vignette_VisiumHD_Mouse_Kidney_analysis.html" class="external-link">Demonstration on a Visium HD data set</a></p>
+<p>SPARROW was originally designed for large scale spatial transcriptomics data analysis, to be used in conjunction with <a href="https://kaishumason.github.io/spotGLM/" class="external-link">the spotGLM package</a> for identifying spatial signals. However, it can be used as a general purpose data selection tool.</p>
+</div>
 </div>
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
 <li><a href="https://www.bioconductor.org/packages/sparrow" class="external-link">View on Bioconductor</a></li>
-<li><a href="https://github.com/kaishumason/SPARROW/" class="external-link">Browse source code</a></li>
+<li><a href="https://github.com/kaishumason/SPARROW/">Browse source code</a></li>
 </ul>
 </div>
 
