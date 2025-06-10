@@ -1,0 +1,4 @@
+template:
+  bootstrap: 5
+  bootswatch: flatly
+  favicon: man/figures/favicon.ico
