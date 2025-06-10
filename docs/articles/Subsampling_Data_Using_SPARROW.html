@@ -57,7 +57,14 @@
   </ul>
 </li>
       </ul>
-<ul class="nav navbar-nav navbar-right"></ul>
+<ul class="nav navbar-nav navbar-right">
+<li>
+  <a href="https://github.com/kaishumason/SPARROW/" class="external-link">
+    <span class="fab fa-github fa-lg"></span>
+
+  </a>
+</li>
+      </ul>
 </div>
 <!--/.nav-collapse -->
   </div>
@@ -73,7 +80,7 @@
       <h1 data-toc-skip>Subsampling Data Using SPARROW</h1>
             
       
-
+      <small class="dont-index">Source: <a href="https://github.com/kaishumason/SPARROW/blob/HEAD/vignettes/Subsampling_Data_Using_SPARROW.Rmd" class="external-link"><code>vignettes/Subsampling_Data_Using_SPARROW.Rmd</code></a></small>
       <div class="hidden name"><code>Subsampling_Data_Using_SPARROW.Rmd</code></div>
 
     </div>
@@ -81,7 +88,7 @@
     
     
 <p>You will need the following packages</p>
-<pre><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">sparrow</span><span class="op">)</span></span>
+<pre><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/kaishumason/SPARROW" class="external-link">sparrow</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">spotglm</span><span class="op">)</span></span></code></pre>
 <div class="section level2">
 <h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
@@ -92,7 +99,7 @@ dOWnstream analysis) is a method that selects a subsample of size
 from a large scale dataset. The subsample is chosen such that it
 maximizes the power of a downstream analysis (e.g. regression). This is
 done by minimizing the trace of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>X</mi><mi>T</mi></msup><mi>X</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(X^TX)^{-1}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>X</mi><mi>T</mi></msup><mi>X</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(X^TX)^{-1}</annotation></semantics></math>
 which corresponds to the sum of the square of the standard errors of a
 standard linear regression. In the case of large scale spatial-omic data
 that contains mixtures of cells called spots, the covariate matrix
@@ -134,8 +141,8 @@ the columns of
 are bounded between 0 and 1. Bounding all columns between some interval
 is recommended to prevent scaling issues and to make interpretation
 easier.</p>
-<pre><code><span><span class="va">data</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/simulate_data.html">simulate_data</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fl">1e5</span>, nct <span class="op">=</span> <span class="fl">8</span>,effect_scale <span class="op">=</span> <span class="fl">1</span><span class="op">/</span><span class="fl">5</span>,</span>
-<span>                              intercept_scale <span class="op">=</span> <span class="fl">4</span>,</span>
+<pre><code><span><span class="va">data</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/simulate_data.html">simulate_data</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fl">1e5</span>, nct <span class="op">=</span> <span class="fl">8</span>,effect_range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">0.2</span>,<span class="fl">0.2</span><span class="op">)</span>,min_effect <span class="op">=</span> <span class="fl">0.05</span>,</span>
+<span>                              intercept_range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">6</span>,<span class="op">-</span><span class="fl">4</span><span class="op">)</span>,</span>
 <span>                              library_size <span class="op">=</span> <span class="fl">1000</span>, spot_ct <span class="op">=</span> <span class="fl">2</span>,</span>
 <span>                              p <span class="op">=</span> <span class="fl">8</span>,num_null <span class="op">=</span> <span class="fl">2</span>,prob_ct <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre>
 </div>
@@ -144,7 +151,7 @@ easier.</p>
 Deconvolution<a class="anchor" aria-label="anchor" href="#step-2-expand-the-covariate-matrix-to-incorporate-deconvolution"></a>
 </h2>
 <p>The model above has a variance covariance matrix equal to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>Z</mi><mi>T</mi></msup><mi>A</mi><mi>Z</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z^TAZ)^{-1}</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>Z</mi><mi>T</mi></msup><mi>A</mi><mi>Z</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z^TAZ)^{-1}</annotation></semantics></math>.
 The matrix
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
 is equal to
@@ -168,12 +175,12 @@ later, we fix a lower bound for
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>X</mi><mi>i</mi></msub><msup><mi>β</mi><mi>t</mi></msup></mrow><annotation encoding="application/x-tex">X_i\beta^t</annotation></semantics></math>
 in order to place a conservative estimate on the standard error.<br>
 For now, let this bound be equal to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>5</mn></mrow><annotation encoding="application/x-tex">-5</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mn>5</mn></mrow><annotation encoding="application/x-tex">-5</annotation></semantics></math>.
 In general, what one can do with spatial transcriptomic data is to
 compute the proportion of total UMIs that come from the each
 gene,compute the 75th percentile of these values, then convert this into
 UMIs per 1000
-(e.g. <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1000</mn><mo>*</mo><mo>exp</mo><mrow><mo stretchy="true" form="prefix">(</mo><mo>−</mo><mn>5</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">1000*\exp(-5)</annotation></semantics></math>).
+(e.g. <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1000</mn><mo>*</mo><mo>exp</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>−</mi><mn>5</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">1000*\exp(-5)</annotation></semantics></math>).
 To expand our covariate matrix we use the “expand covariate matrix”
 function which takes 6 arguments</p>
 <details><summary>
@@ -192,9 +199,7 @@ for. This is only relevant for data selection later.</li>
 covariate matrix needs to be valid. Default is 500.</li>
 </ul></details><pre><code><span><span class="va">expanded_X</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/expand_covariate_matrix.html">expand_covariate_matrix</a></span><span class="op">(</span>X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span>, lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">lambda</span>,</span>
 <span>                                            family <span class="op">=</span> <span class="st">"poisson"</span>,lib_size <span class="op">=</span> <span class="fl">1000</span>,</span>
-<span>                                            min_reads_per_1000 <span class="op">=</span> <span class="fl">1000</span><span class="op">*</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="fl">5</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">valid</span> <span class="op">=</span> <span class="va">expanded_X</span><span class="op">$</span><span class="va">valid</span></span>
-<span><span class="va">expanded_X</span> <span class="op">=</span> <span class="va">expanded_X</span><span class="op">$</span><span class="va">X</span></span></code></pre>
+<span>                                            min_reads_per_1000 <span class="op">=</span> <span class="fl">1000</span><span class="op">*</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></code></pre>
 <p>The output is a list with two entries. Valid is a matrix of dimension
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
 by
@@ -273,7 +278,7 @@ the standard error on the entire dataset be
 </h2>
 <p>SPARROW is a subsampling algorithm that attempts to minimize the
 trace of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z_K^TAZ_K)^{-1}</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z_K^TAZ_K)^{-1}</annotation></semantics></math>.
 Here
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>Z</mi><mi>K</mi></msub><annotation encoding="application/x-tex">Z_K</annotation></semantics></math>
 is a submatrix of
@@ -284,7 +289,7 @@ rows. This is done via stochastic greedy selection which can identify
 solutions that are at least
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><mn>1</mn><mi>/</mi><mi>e</mi></mrow><annotation encoding="application/x-tex">1-1/e</annotation></semantics></math>
 efficient. A natural stopping criterion is when
-<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∀</mo><mi>j</mi><mo>:</mo><msqrt><msubsup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>j</mi><mi>j</mi></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msubsup></msqrt><mo>&lt;</mo><msub><mi>σ</mi><mrow><mtext mathvariant="normal">target</mtext><mo>,</mo><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} &lt; \sigma_{\text{target},j}</annotation></semantics></math></p>
+<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∀</mo><mi>j</mi><mo>:</mo><msqrt><msubsup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>j</mi><mi>j</mi></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msubsup></msqrt><mo>&lt;</mo><msub><mi>σ</mi><mrow><mtext mathvariant="normal">target</mtext><mo>,</mo><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} &lt; \sigma_{\text{target},j}</annotation></semantics></math></p>
 <p>Note that when
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>δ</mi><mrow><mo>max</mo><mo>,</mo><mi>j</mi></mrow></msub><mo>&lt;</mo><msub><mi>δ</mi><mo>min</mo></msub></mrow><annotation encoding="application/x-tex">\delta_{\max,j} &lt; \delta_{\min}</annotation></semantics></math>,
 the amount of data needed to achieve the target standard error plateaus.
@@ -301,7 +306,8 @@ Arguments
 <li>period: If log is TRUE, how often we want to print progress in
 iterations</li>
 </ul></details><pre><code><span><span class="va">selected_indices</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/data_selection.html">data_selection</a></span><span class="op">(</span>X <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">expanded_X</span><span class="op">)</span>,</span>
-<span>                        data_size <span class="op">=</span> <span class="fl">80000</span>,min_SE <span class="op">=</span> <span class="va">target_standard_errors</span>,</span>
+<span>                        max_data_size <span class="op">=</span> <span class="fl">80000</span>,</span>
+<span>                        min_standard_error <span class="op">=</span> <span class="va">target_standard_errors</span>,</span>
 <span>                        log <span class="op">=</span> <span class="cn">TRUE</span>,period <span class="op">=</span> <span class="fl">5000</span><span class="op">)</span></span>
 <span><span class="va">selected_indices</span> <span class="op">=</span> <span class="va">selected_indices</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">selected_indices</span><span class="op">)</span> <span class="op">==</span> <span class="cn">F</span><span class="op">]</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"#Cells Subsampled: "</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">selected_indices</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre>
@@ -325,26 +331,26 @@ that the power on both datasets are near identical.</p>
 <span><span class="va">t1</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.time</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="kw">for</span><span class="op">(</span><span class="va">j</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">nsim</span><span class="op">)</span><span class="op">)</span><span class="op">{</span></span>
 <span>  <span class="co">#simulate new response vector</span></span>
-<span>  <span class="va">expected_value</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/spotglm/man/spot_poisson.html" class="external-link">spot_poisson</a></span><span class="op">$</span><span class="fu">predict</span><span class="op">(</span>X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span>,beta <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">beta</span>, </span>
+<span>  <span class="va">expected_value</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="va">spot_poisson</span><span class="op">$</span><span class="fu">predict</span><span class="op">(</span>X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span>,beta <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">beta</span>, </span>
 <span>                                                 lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">lambda</span>,</span>
 <span>                                                 offset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1000</span><span class="op">)</span>,</span>
 <span>                                                              <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">y</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="va">expected_value</span> <span class="op">=</span> <span class="va">expected_value</span><span class="op">$</span><span class="va">total</span></span>
 <span>  <span class="va">data</span><span class="op">$</span><span class="va">y</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/Poisson.html" class="external-link">rpois</a></span><span class="op">(</span><span class="fl">1e5</span>,lambda <span class="op">=</span> <span class="va">expected_value</span><span class="op">)</span></span>
 <span>  <span class="co">#run spotglm on original dataset</span></span>
-<span>  <span class="va">model_full</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/spotglm/man/run_model.html" class="external-link">run_model</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">y</span>, X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span>, lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">lambda</span>, </span>
+<span>  <span class="va">model_full</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="fu">run_model</span><span class="op">(</span>y <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">y</span>, X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span>, lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">lambda</span>, </span>
 <span>                        offset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1000</span><span class="op">)</span>,<span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">y</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>                        family <span class="op">=</span> <span class="st">"spot poisson"</span>,initialization <span class="op">=</span> <span class="st">"intercept"</span>,</span>
-<span>                        intercept_col <span class="op">=</span> <span class="fl">1</span>,batch_size <span class="op">=</span> <span class="fl">500</span>,n_epochs <span class="op">=</span> <span class="fl">100</span>,</span>
+<span>                        family <span class="op">=</span> <span class="st">"spot poisson"</span>,initialization <span class="op">=</span> <span class="cn">T</span>,</span>
+<span>                        batch_size <span class="op">=</span> <span class="fl">500</span>,n_epochs <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>                        improvement_threshold <span class="op">=</span> <span class="fl">1e-6</span>,max_conv <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
 <span></span>
 <span>  <span class="co">#run spotglm on subsetted data</span></span>
-<span>  <span class="va">model_subset</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/spotglm/man/run_model.html" class="external-link">run_model</a></span><span class="op">(</span>y <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">y</span><span class="op">[</span><span class="va">selected_indices</span><span class="op">]</span>,</span>
+<span>  <span class="va">model_subset</span> <span class="op">=</span> <span class="fu">spotglm</span><span class="fu">::</span><span class="fu">run_model</span><span class="op">(</span>y <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">y</span><span class="op">[</span><span class="va">selected_indices</span><span class="op">]</span>,</span>
 <span>                        X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">X</span><span class="op">[</span><span class="va">selected_indices</span>,<span class="op">]</span>, </span>
 <span>                        lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">lambda</span><span class="op">[</span><span class="va">selected_indices</span>,<span class="op">]</span>, </span>
 <span>                        offset<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1000</span><span class="op">)</span>,<span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">y</span><span class="op">)</span><span class="op">)</span><span class="op">[</span><span class="va">selected_indices</span><span class="op">]</span>,</span>
-<span>                        family <span class="op">=</span> <span class="st">"spot poisson"</span>,initialization <span class="op">=</span> <span class="st">"intercept"</span>,</span>
-<span>                        intercept_col <span class="op">=</span> <span class="fl">1</span>,batch_size <span class="op">=</span> <span class="fl">500</span>,n_epochs <span class="op">=</span> <span class="fl">100</span>,</span>
+<span>                        family <span class="op">=</span> <span class="st">"spot poisson"</span>,initialization <span class="op">=</span> <span class="cn">T</span>,</span>
+<span>                        batch_size <span class="op">=</span> <span class="fl">500</span>,n_epochs <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>                        improvement_threshold <span class="op">=</span> <span class="fl">1e-6</span>,max_conv <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
 <span>  </span>
 <span>  <span class="co">#compute power </span></span>
@@ -372,12 +378,12 @@ that the power on both datasets are near identical.</p>
 
       <footer><div class="copyright">
   <p></p>
-<p>Developed by The package maintainer.</p>
+<p>Developed by Kaishu Mason, Yijia Jiang, Nancy R. Zhang.</p>
 </div>
 
 <div class="pkgdown">
   <p></p>
-<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
       </footer>

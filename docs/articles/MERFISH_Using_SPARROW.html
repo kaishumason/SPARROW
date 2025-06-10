@@ -57,7 +57,14 @@
   </ul>
 </li>
       </ul>
-<ul class="nav navbar-nav navbar-right"></ul>
+<ul class="nav navbar-nav navbar-right">
+<li>
+  <a href="https://github.com/kaishumason/SPARROW/" class="external-link">
+    <span class="fab fa-github fa-lg"></span>
+
+  </a>
+</li>
+      </ul>
 </div>
 <!--/.nav-collapse -->
   </div>
@@ -73,7 +80,7 @@
       <h1 data-toc-skip>Subsampling MERFISH Data Using SPARROW</h1>
             
       
-
+      <small class="dont-index">Source: <a href="https://github.com/kaishumason/SPARROW/blob/HEAD/vignettes/MERFISH_Using_SPARROW.Rmd" class="external-link"><code>vignettes/MERFISH_Using_SPARROW.Rmd</code></a></small>
       <div class="hidden name"><code>MERFISH_Using_SPARROW.Rmd</code></div>
 
     </div>
@@ -81,7 +88,7 @@
     
     
 <p>You will need the following packages</p>
-<pre><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">sparrow</span><span class="op">)</span></span>
+<pre><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/kaishumason/SPARROW" class="external-link">sparrow</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dplyr.tidyverse.org" class="external-link">dplyr</a></span><span class="op">)</span></span></code></pre>
 <div class="section level2">
@@ -152,7 +159,7 @@ majority of significant effects.</p>
 Deconvolution<a class="anchor" aria-label="anchor" href="#step-2-expand-the-covariate-matrix-to-incorporate-deconvolution"></a>
 </h3>
 <p>The model above has a variance covariance matrix equal to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>Z</mi><mi>T</mi></msup><mi>A</mi><mi>Z</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z^TAZ)^{-1}</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>Z</mi><mi>T</mi></msup><mi>A</mi><mi>Z</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z^TAZ)^{-1}</annotation></semantics></math>.
 The matrix
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
 is equal to
@@ -178,7 +185,7 @@ in order to place a conservative estimate on the standard error.<br>
 For now,what we will do with spatial transcriptomic data is to compute
 the proportion of total UMIs that come from the each gene,compute the
 75th percentile of these values, then convert this into UMIs per 1000
-(e.g. <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1000</mn><mo>*</mo><mo>exp</mo><mrow><mo stretchy="true" form="prefix">(</mo><mo>−</mo><mn>5</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">1000*\exp(-5)</annotation></semantics></math>).
+(e.g. <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1000</mn><mo>*</mo><mo>exp</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>−</mi><mn>5</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">1000*\exp(-5)</annotation></semantics></math>).
 To expand our covariate matrix we use the “expand covariate matrix”
 function which takes 6 arguments</p>
 <details><summary>
@@ -204,10 +211,9 @@ covariate matrix needs to be valid. Default is 500.</li>
 <span><span class="co">#make expanded covariate matrix </span></span>
 <span><span class="va">expanded_X</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/expand_covariate_matrix.html">expand_covariate_matrix</a></span><span class="op">(</span>X <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">regions</span>, lambda <span class="op">=</span> <span class="va">data</span><span class="op">$</span><span class="va">CT</span>,</span>
 <span>                            family <span class="op">=</span> <span class="st">"poisson"</span>,lib_size <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">colSums</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">counts</span><span class="op">)</span>,</span>
-<span>                                        min_reads_per_1000 <span class="op">=</span> <span class="fl">1000</span><span class="op">*</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">cutoff</span><span class="op">)</span>,</span>
-<span>                                        min_freq <span class="op">=</span> <span class="fl">250</span><span class="op">)</span></span>
-<span><span class="va">valid_cov</span> <span class="op">=</span> <span class="va">expanded_X</span><span class="op">$</span><span class="va">valid</span></span>
-<span><span class="va">expanded_X</span> <span class="op">=</span> <span class="va">expanded_X</span><span class="op">$</span><span class="va">X</span></span></code></pre>
+<span>                                        min_reads_per_1000 <span class="op">=</span> <span class="fl">1000</span><span class="op">*</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">cutoff</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">valid_cov</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">expanded_X</span>,<span class="fl">2</span>,<span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">{</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">x</span><span class="op">&gt;</span><span class="fl">0</span><span class="op">)</span><span class="op">}</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">50</span>,<span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">regions</span><span class="op">)</span>,<span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">data</span><span class="op">$</span><span class="va">CT</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">expanded_X</span> <span class="op">=</span> <span class="va">expanded_X</span><span class="op">[</span>,<span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">expanded_X</span>,<span class="fl">2</span>,<span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">{</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">x</span><span class="op">&gt;</span><span class="fl">0</span><span class="op">)</span><span class="op">}</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">50</span><span class="op">]</span></span></code></pre>
 <p>The output is a list with two entries. Valid is a matrix of dimension
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
 by
@@ -285,7 +291,7 @@ the standard error on the entire dataset be
 </h3>
 <p>SPARROW is a subsampling algorithm that attempts to minimize the
 trace of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z_K^TAZ_K)^{-1}</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">(Z_K^TAZ_K)^{-1}</annotation></semantics></math>.
 Here
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>Z</mi><mi>K</mi></msub><annotation encoding="application/x-tex">Z_K</annotation></semantics></math>
 is a submatrix of
@@ -296,7 +302,7 @@ rows. This is done via stochastic greedy selection which can identify
 solutions that are at least
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><mn>1</mn><mi>/</mi><mi>e</mi></mrow><annotation encoding="application/x-tex">1-1/e</annotation></semantics></math>
 efficient. A natural stopping criterion is when
-<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∀</mo><mi>j</mi><mo>:</mo><msqrt><msubsup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>j</mi><mi>j</mi></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msubsup></msqrt><mo>&lt;</mo><msub><mi>σ</mi><mrow><mtext mathvariant="normal">target</mtext><mo>,</mo><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} &lt; \sigma_{\text{target},j}</annotation></semantics></math></p>
+<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∀</mo><mi>j</mi><mo>:</mo><msqrt><msubsup><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>Z</mi><mi>K</mi><mi>T</mi></msubsup><mi>A</mi><msub><mi>Z</mi><mi>K</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mi>j</mi><mi>j</mi></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msubsup></msqrt><mo>&lt;</mo><msub><mi>σ</mi><mrow><mtext mathvariant="normal">target</mtext><mo>,</mo><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\forall j: \sqrt{(Z_K^TAZ_K)^{-1}_{jj}} &lt; \sigma_{\text{target},j}</annotation></semantics></math></p>
 <p>Note that when
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>δ</mi><mrow><mo>max</mo><mo>,</mo><mi>j</mi></mrow></msub><mo>&lt;</mo><msub><mi>δ</mi><mo>min</mo></msub></mrow><annotation encoding="application/x-tex">\delta_{\max,j} &lt; \delta_{\min}</annotation></semantics></math>,
 the amount of data needed to achieve the target standard error plateaus.
@@ -313,7 +319,7 @@ Arguments
 <li>period: If log is TRUE, how often we want to print progress in
 iterations</li>
 </ul></details><pre><code><span><span class="va">selected_indices</span> <span class="op">=</span> <span class="fu">sparrow</span><span class="fu">::</span><span class="fu"><a href="../reference/data_selection.html">data_selection</a></span><span class="op">(</span>X <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">expanded_X</span><span class="op">)</span>,</span>
-<span>                        data_size <span class="op">=</span> <span class="fl">300000</span>,min_SE <span class="op">=</span> <span class="va">target_standard_errors</span>,</span>
+<span>                        max_data_size <span class="op">=</span> <span class="fl">300000</span>,min_standard_error <span class="op">=</span> <span class="va">target_standard_errors</span>,</span>
 <span>                        log <span class="op">=</span> <span class="cn">TRUE</span>,period <span class="op">=</span> <span class="fl">10000</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">selected_indices</span> <span class="op">=</span> <span class="va">selected_indices</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">selected_indices</span><span class="op">)</span> <span class="op">==</span> <span class="cn">F</span><span class="op">]</span></span>
@@ -578,12 +584,12 @@ identify nearly all effects found in the full dataset.</p>
 
       <footer><div class="copyright">
   <p></p>
-<p>Developed by The package maintainer.</p>
+<p>Developed by Kaishu Mason, Yijia Jiang, Nancy R. Zhang.</p>
 </div>
 
 <div class="pkgdown">
   <p></p>
-<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
       </footer>

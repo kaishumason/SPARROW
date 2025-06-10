@@ -38,7 +38,13 @@
       <a href="../articles/Subsampling_Data_Using_SPARROW.html">Subsampling Data Using SPARROW</a>
     </li>
   </ul></li>
-      </ul><ul class="nav navbar-nav navbar-right"></ul></div><!--/.nav-collapse -->
+      </ul><ul class="nav navbar-nav navbar-right"><li>
+  <a href="https://github.com/kaishumason/SPARROW/" class="external-link">
+    <span class="fab fa-github fa-lg"></span>
+
+  </a>
+</li>
+      </ul></div><!--/.nav-collapse -->
   </div><!--/.container -->
 </div><!--/.navbar -->
 
@@ -48,7 +54,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Select Data with Early Stopping Based on Standard Errors</h1>
-
+    <small class="dont-index">Source: <a href="https://github.com/kaishumason/SPARROW/blob/HEAD/R/data_selection.R" class="external-link"><code>R/data_selection.R</code></a></small>
     <div class="hidden name"><code>data_selection.Rd</code></div>
     </div>
 
@@ -57,7 +63,13 @@
     </div>
 
     <div id="ref-usage">
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_selection</span><span class="op">(</span><span class="va">X</span>, <span class="va">data_size</span>, min_SE <span class="op">=</span> <span class="cn">NULL</span>, log <span class="op">=</span> <span class="cn">FALSE</span>, period <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_selection</span><span class="op">(</span></span>
+<span>  <span class="va">X</span>,</span>
+<span>  <span class="va">max_data_size</span>,</span>
+<span>  min_standard_error <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  period <span class="op">=</span> <span class="fl">1000</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -68,11 +80,11 @@
 <dd><p>Covariate matrix (p x n)</p></dd>
 
 
-<dt id="arg-data-size">data_size<a class="anchor" aria-label="anchor" href="#arg-data-size"></a></dt>
-<dd><p>Number of data points to select</p></dd>
+<dt id="arg-max-data-size">max_data_size<a class="anchor" aria-label="anchor" href="#arg-max-data-size"></a></dt>
+<dd><p>maximum number of data points to select</p></dd>
 
 
-<dt id="arg-min-se">min_SE<a class="anchor" aria-label="anchor" href="#arg-min-se"></a></dt>
+<dt id="arg-min-standard-error">min_standard_error<a class="anchor" aria-label="anchor" href="#arg-min-standard-error"></a></dt>
 <dd><p>Target standard errors for convergence</p></dd>
 
 
@@ -97,11 +109,11 @@
 
 
       <footer><div class="copyright">
-  <p></p><p>Developed by The package maintainer.</p>
+  <p></p><p>Developed by Kaishu Mason, Yijia Jiang, Nancy R. Zhang.</p>
 </div>
 
 <div class="pkgdown">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
       </footer></div>
